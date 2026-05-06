@@ -60,6 +60,11 @@ reg [4:0]  load_cnt;    // counts 0..17 (16 reads + 1 pipeline flush)
 reg [1:0]  k, i, j;    // loop indices
 reg signed [31:0] through;  // dist[i][k] + dist[k][j]
 
+// S_DONE temporaries — must be module-level regs in Verilog-2001
+reg [1:0]         best_idx;
+reg signed [31:0] best_val;
+integer           mi, ni;   // loop counters for mask building
+
 // --------------------------------------------------------------------------
 // Sequential logic
 // --------------------------------------------------------------------------
@@ -109,8 +114,8 @@ always @(posedge clk) begin
             // dist[i][j] = min(dist[i][j],  dist[i][k] + dist[k][j])
             // -----------------------------------------------------------------
             S_COMP: begin
-                through = dist[{i, k}] + dist[{k, j}];
-                if (through < dist[{i, j}])
+                through = $signed(dist[{i, k}]) + $signed(dist[{k, j}]);
+                if (through < $signed(dist[{i, j}]))
                     dist[{i, j}] <= through;
 
                 // Advance j → i → k (innermost first)
@@ -130,28 +135,26 @@ always @(posedge clk) begin
 
             // -----------------------------------------------------------------
             S_DONE: begin
-                done  <= 1'b1;
-                // Build loop_mask: flag row & col of the most negative diagonal
-                begin
-                    reg [1:0] best_idx;
-                    reg signed [31:0] best_val;
-                    integer m, n;
-                    best_val = 32'sh7FFF_FFFF;
-                    best_idx = 2'd0;
-                    if ($signed(dist[0])  < best_val) begin best_val = dist[0];  best_idx = 2'd0; end
-                    if ($signed(dist[5])  < best_val) begin best_val = dist[5];  best_idx = 2'd1; end
-                    if ($signed(dist[10]) < best_val) begin best_val = dist[10]; best_idx = 2'd2; end
-                    if ($signed(dist[15]) < best_val) begin best_val = dist[15]; best_idx = 2'd3; end
+                done <= 1'b1;
 
-                    loop_mask <= 16'h0000;
-                    if (best_val < 0) begin
-                        // Highlight entire row and column of best_idx
-                        for (m = 0; m < 4; m = m+1)
-                            loop_mask[{best_idx, m[1:0]}] <= 1'b1;  // row
-                        for (n = 0; n < 4; n = n+1)
-                            loop_mask[{n[1:0], best_idx}] <= 1'b1;  // col
-                    end
+                // Find most-negative diagonal using module-level regs
+                best_val = 32'sh7FFF_FFFF;
+                best_idx = 2'd0;
+                if ($signed(dist[0])  < best_val) begin best_val = dist[0];  best_idx = 2'd0; end
+                if ($signed(dist[5])  < best_val) begin best_val = dist[5];  best_idx = 2'd1; end
+                if ($signed(dist[10]) < best_val) begin best_val = dist[10]; best_idx = 2'd2; end
+                if ($signed(dist[15]) < best_val) begin best_val = dist[15]; best_idx = 2'd3; end
+
+                // Build loop_mask: highlight row + column of best_idx
+                // Use integer index arithmetic to avoid packed-select issues
+                loop_mask <= 16'h0000;
+                if (best_val < 0) begin
+                    for (mi = 0; mi < 4; mi = mi + 1)
+                        loop_mask[best_idx * 4 + mi] <= 1'b1;   // row
+                    for (ni = 0; ni < 4; ni = ni + 1)
+                        loop_mask[ni * 4 + best_idx] <= 1'b1;   // col
                 end
+
                 state <= S_IDLE;
             end
 
