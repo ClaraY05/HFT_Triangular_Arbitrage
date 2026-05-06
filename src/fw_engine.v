@@ -48,8 +48,7 @@ always @(posedge clk) begin
                 end
             end
 
-            S_LOAD: begin
-                // capture: data for addr N arrives at load_cnt = N+2
+            S_LOAD: begin //data ingestion
                 if (load_cnt >= 5'd2 && load_cnt <= 5'd17)
                     dist[load_cnt - 2] <= $signed(mat_data);
 
@@ -59,13 +58,12 @@ always @(posedge clk) begin
                     j     <= 2'd0;
                     state <= S_COMP;
                 end else begin
-                    // issue next address, hold at 15 once reached
                     mat_addr <= (load_cnt < 5'd15) ? load_cnt[3:0] + 1 : 4'd15;
                     load_cnt <= load_cnt + 1;
                 end
             end
 
-            S_COMP: begin
+            S_COMP: begin //main implementation of Floyd-Warshall
                 through = $signed(dist[{i, k}]) + $signed(dist[{k, j}]);
                 if (through < $signed(dist[{i, j}]))
                     dist[{i, j}] <= through;
@@ -84,7 +82,7 @@ always @(posedge clk) begin
                     j <= j + 1;
             end
 
-            S_DONE: begin
+            S_DONE: begin //analysis & loop masking
                 done <= 1'b1;
 
                 best_val = 32'sh7FFF_FFFF;
@@ -110,9 +108,9 @@ always @(posedge clk) begin
     end
 end
 
-assign diag0 = dist[0];
-assign diag1 = dist[5];
-assign diag2 = dist[10];
-assign diag3 = dist[15];
+assign diag0 = dist[0]; //dist[0][0]
+assign diag1 = dist[5]; //dist[1][1]
+assign diag2 = dist[10]; //dist[2][2]
+assign diag3 = dist[15]; //dist[3][3]
 
 endmodule
