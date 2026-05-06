@@ -18,7 +18,11 @@ matrix_buffer dut (
 initial clk = 0;
 always #5 clk = ~clk;
 
-// Send one byte per clock (back-to-back)
+// Latch the one-cycle ready pulse
+reg ready_seen;
+always @(posedge clk)
+    if (ready) ready_seen <= 1'b1;
+
 task send_byte;
     input [7:0] b;
     begin
@@ -37,25 +41,31 @@ initial begin
     $dumpfile("tb_matrix_buffer.vcd");
     $dumpvars(0, tb_matrix_buffer);
 
-    rst = 1; byte_valid = 0; errors = 0;
+    rst        = 1;
+    byte_valid = 0;
+    byte_in    = 0;
+    rd_addr    = 0;
+    ready_seen = 0;
+    errors     = 0;
+
     repeat (5) @(posedge clk);
     rst = 0;
 
-    // Fill expected[]: word N = 32'hAABBCCDD shifted by N
-    // Send as little-endian bytes: LSB first
+    // Build expected words
     for (i = 0; i < 16; i = i+1)
-        expected[i] = 32'h01020304 + i;  // distinct per word
+        expected[i] = 32'h01020304 + i;
 
+    // Send all 64 bytes little-endian
     for (i = 0; i < 16; i = i+1) begin
-        send_byte(expected[i][7:0]);    // byte 0 (LSB)
-        send_byte(expected[i][15:8]);   // byte 1
-        send_byte(expected[i][23:16]);  // byte 2
-        send_byte(expected[i][31:24]);  // byte 3 (MSB)
+        send_byte(expected[i][7:0]);
+        send_byte(expected[i][15:8]);
+        send_byte(expected[i][23:16]);
+        send_byte(expected[i][31:24]);
     end
 
-    // Wait for ready pulse
+    // Wait a few cycles then check latched flag
     repeat (5) @(posedge clk);
-    if (!ready) begin
+    if (!ready_seen) begin
         $display("FAIL: ready never pulsed"); errors = errors + 1;
     end else
         $display("PASS: ready pulsed");
@@ -64,8 +74,8 @@ initial begin
     @(posedge clk);
     for (i = 0; i < 16; i = i+1) begin
         rd_addr = i;
-        @(posedge clk); // 1-cycle read latency
         @(posedge clk);
+        @(posedge clk); // 1-cycle read latency
         if (rd_data !== expected[i]) begin
             $display("FAIL word[%0d]: got %08X, expected %08X", i, rd_data, expected[i]);
             errors = errors + 1;
@@ -74,11 +84,12 @@ initial begin
     end
 
     // --- Edge case: ready must NOT pulse before 64 bytes ---
+    ready_seen = 0;
     rst = 1; @(posedge clk); rst = 0;
-    for (i = 0; i < 63; i = i+1) send_byte(8'hAA);  // only 63 bytes
+    for (i = 0; i < 63; i = i+1) send_byte(8'hAA);
     repeat (3) @(posedge clk);
-    if (ready) begin
-        $display("FAIL: ready pulsed early (only 63 bytes sent)"); errors = errors + 1;
+    if (ready_seen) begin
+        $display("FAIL: ready pulsed early (only 63 bytes sent)"); errors=errors+1;
     end else
         $display("PASS: no spurious ready on 63 bytes");
 
@@ -86,5 +97,7 @@ initial begin
     else             $display("\n=== %0d MATRIX BUFFER TEST(S) FAILED ===", errors);
     $finish;
 end
+
 initial begin #5_000_000; $display("TIMEOUT"); $finish; end
+
 endmodule

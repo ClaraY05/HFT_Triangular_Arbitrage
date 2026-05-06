@@ -42,13 +42,14 @@ always @(posedge clk) begin
 
             S_IDLE: begin
                 if (run) begin
-                    load_cnt <= 5'd2;
+                    load_cnt <= 5'd0;
                     mat_addr <= 4'd0;
                     state    <= S_LOAD;
                 end
             end
 
             S_LOAD: begin
+                // capture: data for addr N arrives at load_cnt = N+2
                 if (load_cnt >= 5'd2 && load_cnt <= 5'd17)
                     dist[load_cnt - 2] <= $signed(mat_data);
 
@@ -58,7 +59,8 @@ always @(posedge clk) begin
                     j     <= 2'd0;
                     state <= S_COMP;
                 end else begin
-                    mat_addr <= (load_cnt < 5'd16) ? load_cnt[3:0] - 1 : 4'd0;
+                    // issue next address, hold at 15 once reached
+                    mat_addr <= (load_cnt < 5'd15) ? load_cnt[3:0] + 1 : 4'd15;
                     load_cnt <= load_cnt + 1;
                 end
             end
