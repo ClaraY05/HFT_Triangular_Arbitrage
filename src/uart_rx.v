@@ -1,5 +1,5 @@
 `timescale 1ns/1ps
-module uart_rx #(
+module uart_rx #( // (uart_rx.v) Universal Asynchronous Receiver-Transmitter Receiver
     parameter CLK_HZ = 100_000_000, // system clock frequency in Hz, (default 100 MHz)
     parameter BAUD   = 115200       // desired baud rate (default 115200)
 )
