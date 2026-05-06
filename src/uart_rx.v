@@ -1,41 +1,26 @@
 `timescale 1ns/1ps
-// =============================================================================
-// uart_rx.v  --  8-N-1 UART receiver
-// =============================================================================
-// Parameters
-//   CLK_HZ : system clock frequency in Hz   (default 100 MHz)
-//   BAUD   : desired baud rate              (default 115200)
-//
-// Outputs
-//   data  : received byte, valid when 'valid' is high for one clock cycle
-//   valid : single-cycle pulse when a complete byte has been received
-// =============================================================================
 module uart_rx #(
-    parameter CLK_HZ = 100_000_000,
-    parameter BAUD   = 115200
-)(
+    parameter CLK_HZ = 100_000_000, // system clock frequency in Hz, (default 100 MHz)
+    parameter BAUD   = 115200       // desired baud rate (default 115200)
+)
+(
     input  wire       clk,
     input  wire       rst,
     input  wire       rx,
-    output reg  [7:0] data,
-    output reg        valid
+    output reg  [7:0] data,         // received byte, valid when 'valid' is high for one clock cycle
+    output reg        valid         // pulse when a complete byte has been received
 );
 
-// Number of clock cycles per UART bit period
-localparam integer CLKS_PER_BIT = CLK_HZ / BAUD;  // 868 @ 100 MHz / 115200
+localparam integer CLKS_PER_BIT = CLK_HZ / BAUD;  // (default 868 @ 100 MHz / 115200)
 
-// --------------------------------------------------------------------------
-// Two-FF synchroniser on rx to avoid metastability
-// --------------------------------------------------------------------------
+// Two-FlipFlop synchroniser on rx to avoid metastability
 reg rx_s0, rx_s1;
 always @(posedge clk) begin
     rx_s0 <= rx;
     rx_s1 <= rx_s0;
 end
 
-// --------------------------------------------------------------------------
-// State machine
-// --------------------------------------------------------------------------
+// State machine, detects and outputs valid bytes received
 localparam S_IDLE  = 2'd0,
            S_START = 2'd1,
            S_DATA  = 2'd2,
@@ -56,15 +41,14 @@ always @(posedge clk) begin
     end else begin
         case (state)
 
-            // Wait for falling edge (start bit)
+            // Wait for falling edge
             S_IDLE: begin
                 if (!rx_s1) begin
                     state   <= S_START;
-                    clk_cnt <= CLKS_PER_BIT / 2;  // sample mid-bit
+                    clk_cnt <= CLKS_PER_BIT / 2; 
                 end
             end
 
-            // Verify start bit is still low at mid-point
             S_START: begin
                 if (clk_cnt == 0) begin
                     if (!rx_s1) begin
@@ -72,7 +56,7 @@ always @(posedge clk) begin
                         bit_idx <= 0;
                         clk_cnt <= CLKS_PER_BIT;
                     end else
-                        state <= S_IDLE;  // glitch, abort
+                        state <= S_IDLE; 
                 end else
                     clk_cnt <= clk_cnt - 1;
             end
@@ -80,7 +64,7 @@ always @(posedge clk) begin
             // Shift in 8 data bits, LSB first
             S_DATA: begin
                 if (clk_cnt == 0) begin
-                    shift   <= {rx_s1, shift[7:1]};  // LSB-first shift
+                    shift   <= {rx_s1, shift[7:1]}; 
                     clk_cnt <= CLKS_PER_BIT;
                     if (bit_idx == 7)
                         state <= S_STOP;
@@ -93,7 +77,7 @@ always @(posedge clk) begin
             // Sample stop bit, output byte
             S_STOP: begin
                 if (clk_cnt == 0) begin
-                    if (rx_s1) begin    // stop bit must be high (valid frame)
+                    if (rx_s1) begin    // stop bit must be high
                         data  <= shift;
                         valid <= 1'b1;
                     end
