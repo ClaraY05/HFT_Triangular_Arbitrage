@@ -47,11 +47,11 @@ except ImportError:
 # Use 0 for pairs with no direct FX market (they become INF after transform).
 # --------------------------------------------------------------------------
 RATES = [
-    #  USD      EUR      GBP      JPY
-    [1.0000, 1.0850, 1.2700, 149.50],   # from USD
-    [0.9220, 1.0000, 1.1710, 137.80],   # from EUR
-    [0.7880, 0.8540, 1.0000, 117.70],   # from GBP
-    [0.0067, 0.0073, 0.0085,  1.000],   # from JPY
+    #  USD    EUR    GBP    JPY
+    [1.000, 1.500, 0.001, 0.001],   # USD
+    [0.001, 1.000, 1.500, 0.001],   # EUR
+    [1.500, 0.001, 1.000, 0.001],   # GBP
+    [0.001, 0.001, 0.001, 1.000],   # JPY
 ]
 
 SCALE  = 1 << 16          # Q16.16 scale factor
