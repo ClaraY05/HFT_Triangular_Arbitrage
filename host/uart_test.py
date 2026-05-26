@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-send_digit.py  --  Send a digit (0-9) to the Basys 3 UART digit test project.
+uart_test.py  --  Send a digit (0-9) to the Basys 3 UART digit test project.
 
 The FPGA expects a single ASCII character ('0'=0x30 through '9'=0x39) at
 57600 baud, 8-N-1, no flow control.  On receipt it displays the digit on
@@ -9,11 +9,11 @@ all four seven-segment displays.
 Usage
 -----
   # One-shot: send the digit 7
-  python send_digit.py --port COM3 --digit 7          # Windows
-  python send_digit.py --port /dev/ttyUSB1 --digit 7  # Linux / macOS
+  python uart_test.py --port COM3 --digit 7          # Windows
+  python uart_test.py --port /dev/ttyUSB1 --digit 7  # Linux / macOS
 
   # Interactive mode (no --digit flag): type digits at the prompt
-  python send_digit.py --port COM3
+  python uart_test.py --port COM3
 
 Common port names
 -----------------
