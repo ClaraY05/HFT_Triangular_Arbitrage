@@ -36,7 +36,7 @@ except ImportError:
 
 
 BAUD    = 57600
-ECHO_IMEOUT = 1.0   # seconds
+ECHO_TIMEOUT = 1.0   # seconds
 
 
 def send_and_verify(ser: "serial.Serial", digit: int) -> bool:
