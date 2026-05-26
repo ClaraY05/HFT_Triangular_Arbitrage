@@ -26,6 +26,7 @@ module vga_renderer #(
     input  wire        profit_found,
     input  wire [15:0] loop_mask,
     input  wire [13:0] profit_pct_x100,  // profit in hundredths of % (e.g. 123 = 1.23%)
+    input  wire [31:0] profit_val,        // raw Q16.16 magnitude (matches 7-seg display)
     output reg  [3:0]  r,
     output reg  [3:0]  g,
     output reg  [3:0]  b
@@ -289,14 +290,23 @@ wire status_label =
     is_char_pixel(px,py, ST_X+54, ST_Y, 7'h3A);   // :
 
 // Profit value digits (always rendered; show 0.00 when no profit)
-// profit_pct_x100 = XXYY where XX=integer part, YY=fractional
-wire [6:0] d_tens  = 7'h30 + {3'b0, profit_pct_x100[13:8] / 10};   // tens of integer
-wire [6:0] d_ones  = 7'h30 + {3'b0, profit_pct_x100[13:8] % 10};   // ones of integer
-wire [6:0] d_tenth = 7'h30 + {3'b0, profit_pct_x100[7:4]};         // tenths
-wire [6:0] d_hund  = 7'h30 + {3'b0, profit_pct_x100[3:0]};         // hundredths
+// profit_pct_x100 is a plain binary value in hundredths of %
+// e.g. 123 means 1.23% -> display as  "01.23"
+// Extract 4 decimal digits: thousands(tens-of-%), hundreds(ones-of-%),
+// tens(tenths-of-%), ones(hundredths-of-%) via successive division.
+wire [13:0] pct = profit_pct_x100;          // 0..9999
+wire [3:0]  dig3 = pct / 1000;              // thousands  (tens of %)
+wire [3:0]  dig2 = (pct % 1000) / 100;     // hundreds   (ones of %)
+wire [3:0]  dig1 = (pct % 100)  / 10;      // tens       (tenths of %)
+wire [3:0]  dig0 = pct % 10;               // ones       (hundredths of %)
 
-// Blank leading tens digit if < 10
-wire blank_tens = (profit_pct_x100[13:8] < 6'd10);
+wire [6:0] d_tens  = 7'h30 + {3'b0, dig3};   // tens of integer %
+wire [6:0] d_ones  = 7'h30 + {3'b0, dig2};   // ones of integer %
+wire [6:0] d_tenth = 7'h30 + {3'b0, dig1};   // tenths of %
+wire [6:0] d_hund  = 7'h30 + {3'b0, dig0};   // hundredths of %
+
+// Blank leading tens digit if < 10%
+wire blank_tens = (dig3 == 4'd0);
 
 wire status_val =
     (blank_tens ? 1'b0 : is_char_pixel(px,py, ST_X+72, ST_Y, d_tens))  |
@@ -320,6 +330,45 @@ wire no_arb_text =
     is_char_pixel(px,py, ST_X+150,ST_Y, 7'h41) |  // A
     is_char_pixel(px,py, ST_X+159,ST_Y, 7'h47) |  // G
     is_char_pixel(px,py, ST_X+168,ST_Y, 7'h45));  // E
+
+// ==========================================================================
+// Raw Q16.16 integer sum display  (matches 7-seg SW0=1 mode)
+// Shows "RAW: XXXX" on the line below the profit % status.
+// profit_val[31:16] is the integer part; clamped to 9999 for 4-digit display.
+// ==========================================================================
+localparam RW_Y = ST_Y + 16;
+localparam RW_X = ST_X;
+
+wire [15:0] raw_int  = profit_val[31:16];
+wire [13:0] raw_disp = (raw_int > 16'd9999) ? 14'd9999 : raw_int[13:0];
+
+wire [3:0]  rw_d3 = raw_disp / 1000;
+wire [3:0]  rw_d2 = (raw_disp % 1000) / 100;
+wire [3:0]  rw_d1 = (raw_disp % 100)  / 10;
+wire [3:0]  rw_d0 = raw_disp % 10;
+
+wire [6:0] rw_c3 = 7'h30 + {3'b0, rw_d3};
+wire [6:0] rw_c2 = 7'h30 + {3'b0, rw_d2};
+wire [6:0] rw_c1 = 7'h30 + {3'b0, rw_d1};
+wire [6:0] rw_c0 = 7'h30 + {3'b0, rw_d0};
+
+wire blank_rw_d3 = (rw_d3 == 4'd0);
+wire blank_rw_d2 = blank_rw_d3 && (rw_d2 == 4'd0);
+wire blank_rw_d1 = blank_rw_d2 && (rw_d1 == 4'd0);
+
+// "RAW:" label
+wire raw_label =
+    is_char_pixel(px,py, RW_X+0,  RW_Y, 7'h52) |  // R
+    is_char_pixel(px,py, RW_X+9,  RW_Y, 7'h41) |  // A
+    is_char_pixel(px,py, RW_X+18, RW_Y, 7'h57) |  // W
+    is_char_pixel(px,py, RW_X+27, RW_Y, 7'h3A);   // :
+
+// 4-digit value with leading zero suppression (always show at least 1 digit)
+wire raw_val_px =
+    (blank_rw_d3 ? 1'b0 : is_char_pixel(px,py, RW_X+45, RW_Y, rw_c3)) |
+    (blank_rw_d2 ? 1'b0 : is_char_pixel(px,py, RW_X+54, RW_Y, rw_c2)) |
+    (blank_rw_d1 ? 1'b0 : is_char_pixel(px,py, RW_X+63, RW_Y, rw_c1)) |
+    is_char_pixel(px,py, RW_X+72, RW_Y, rw_c0);
 
 // ==========================================================================
 // Grid pixel logic
@@ -361,7 +410,9 @@ always @(posedge pclk) begin
     end else if (title_px || col_hdr_px || row_lbl_px || from_px ||
                  legend_text || status_label ||
                  (profit_found && status_val) ||
-                 no_arb_text) begin
+                 no_arb_text ||
+                 raw_label ||
+                 (profit_found && raw_val_px)) begin
         r <= 4'hF; g <= 4'hF; b <= 4'hF;   // white text
 
     // ---- Background ----

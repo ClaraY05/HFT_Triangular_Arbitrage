@@ -41,29 +41,35 @@ always @(posedge clk) begin
         case (state)
 
             S_IDLE: begin
+                mat_addr <= 4'd0;        // always prime BRAM so mem[0] is ready on first S_LOAD cycle
                 if (run) begin
                     load_cnt <= 5'd0;
-                    mat_addr <= 4'd0;
                     state    <= S_LOAD;
                 end
             end
 
-            S_LOAD: begin //data ingestion
-                if (load_cnt >= 5'd2 && load_cnt <= 5'd17)
-                    dist[load_cnt - 2] <= $signed(mat_data);
+            S_LOAD: begin
+                // mat_addr was set to 0 in S_IDLE (reset) so mem[0] is
+                // already on rd_data when we enter S_LOAD (1-cycle BRAM latency).
+                // Capture dist[load_cnt] = rd_data each cycle and simultaneously
+                // advance mat_addr to load_cnt+1 so mem[load_cnt+1] arrives next cycle.
+                // Transition after all 16 words (load_cnt 0..15) are captured.
+                if (load_cnt <= 5'd15)
+                    dist[load_cnt[3:0]] <= $signed(mat_data);
 
-                if (load_cnt == 5'd18) begin
+                if (load_cnt == 5'd15) begin
                     k     <= 2'd0;
                     i     <= 2'd0;
                     j     <= 2'd0;
                     state <= S_COMP;
                 end else begin
-                    mat_addr <= (load_cnt < 5'd15) ? load_cnt[3:0] + 1 : 4'd15;
+                    // advance address; clamp at 15
+                    mat_addr <= (load_cnt < 5'd14) ? load_cnt[3:0] + 5'd1 : 4'd15;
                     load_cnt <= load_cnt + 1;
                 end
             end
 
-            S_COMP: begin //main implementation of Floyd-Warshall
+            S_COMP: begin
                 through = $signed(dist[{i, k}]) + $signed(dist[{k, j}]);
                 if (through < $signed(dist[{i, j}]))
                     dist[{i, j}] <= through;
@@ -82,7 +88,7 @@ always @(posedge clk) begin
                     j <= j + 1;
             end
 
-            S_DONE: begin //analysis & loop masking
+            S_DONE: begin
                 done <= 1'b1;
 
                 best_val = 32'sh7FFF_FFFF;
@@ -94,10 +100,20 @@ always @(posedge clk) begin
 
                 loop_mask <= 16'h0000;
                 if (best_val < 0) begin
-                    for (mi = 0; mi < 4; mi = mi + 1)
-                        loop_mask[best_idx * 4 + mi] <= 1'b1;
-                    for (ni = 0; ni < 4; ni = ni + 1)
-                        loop_mask[ni * 4 + best_idx] <= 1'b1;
+                    // Highlight the row and column of the pivot currency,
+                    // but EXCLUDE the diagonal self-cell [best_idx][best_idx]
+                    // (e.g. JPY->JPY), which has no economic meaning as an
+                    // arbitrage path.
+                    for (mi = 0; mi < 4; mi = mi + 1) begin
+                        // Row highlight: skip the diagonal element
+                        if (mi != best_idx)
+                            loop_mask[best_idx * 4 + mi] <= 1'b1;
+                    end
+                    for (ni = 0; ni < 4; ni = ni + 1) begin
+                        // Column highlight: skip the diagonal element
+                        if (ni != best_idx)
+                            loop_mask[ni * 4 + best_idx] <= 1'b1;
+                    end
                 end
 
                 state <= S_IDLE;
@@ -108,9 +124,9 @@ always @(posedge clk) begin
     end
 end
 
-assign diag0 = dist[0]; //dist[0][0]
-assign diag1 = dist[5]; //dist[1][1]
-assign diag2 = dist[10]; //dist[2][2]
-assign diag3 = dist[15]; //dist[3][3]
+assign diag0 = dist[0];
+assign diag1 = dist[5];
+assign diag2 = dist[10];
+assign diag3 = dist[15];
 
 endmodule

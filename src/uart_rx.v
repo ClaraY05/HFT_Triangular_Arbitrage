@@ -12,7 +12,7 @@
 // =============================================================================
 module uart_rx #(
     parameter CLK_HZ = 100_000_000,
-    parameter BAUD   = 115200
+    parameter BAUD   = 57600
 )(
     input  wire       clk,
     input  wire       rst,

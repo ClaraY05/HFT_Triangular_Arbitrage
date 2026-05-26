@@ -22,7 +22,7 @@ always @(posedge clk) rst_r <= btnC;
 // UART RX
 wire       byte_valid;
 wire [7:0] byte_data;
-uart_rx #(.CLK_HZ(100_000_000), .BAUD(115200)) u_uart (
+uart_rx #(.CLK_HZ(100_000_000), .BAUD(57600)) u_uart (
     .clk(clk), .rst(rst), .rx(rx), .data(byte_data), .valid(byte_valid)
 );
 
@@ -86,6 +86,7 @@ vga_top u_vga (
     .profit_found(profit_found),
     .loop_mask(loop_mask),
     .profit_pct_x100(profit_pct_x100),
+    .profit_val(profit_val),
     .hsync(vga_hsync), .vsync(vga_vsync),
     .r(vga_r), .g(vga_g), .b(vga_b)
 );

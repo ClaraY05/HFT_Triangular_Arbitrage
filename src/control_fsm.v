@@ -1,5 +1,17 @@
 `timescale 1ns/1ps
-//state machine to control when to run the fw_engine
+// =============================================================================
+// control_fsm.v  --  Top-level sequencer
+// =============================================================================
+//
+//  State diagram:
+//
+//    IDLE ──(buf_ready)──► LOAD ──(1 cycle)──► RUN ──(fw_done)──► DONE
+//     ▲                                                              │
+//     └──────────────────────(buf_ready asserts again)──────────────┘
+//
+//  'run' is asserted for exactly ONE clock cycle to kick fw_engine.
+//  DONE stays until new data arrives, then auto-restarts.
+// =============================================================================
 module control_fsm (
     input  wire clk,
     input  wire rst,
@@ -8,10 +20,10 @@ module control_fsm (
     output reg  run          // one-cycle pulse to fw_engine
 );
 
-localparam S_IDLE = 2'd0, //system is waiting for work.
-           S_LOAD = 2'd1, //transitional state that "kicks" the engine.
-           S_RUN  = 2'd2, //controller waits while the fw_engine does its job.
-           S_DONE = 2'd3; //processing is finished
+localparam S_IDLE = 2'd0,
+           S_LOAD = 2'd1,
+           S_RUN  = 2'd2,
+           S_DONE = 2'd3;
 
 reg [1:0] state;
 
@@ -28,6 +40,7 @@ always @(posedge clk) begin
             end
 
             S_LOAD: begin
+                // Assert run for one cycle, then wait for engine
                 run   <= 1'b1;
                 state <= S_RUN;
             end
@@ -37,6 +50,7 @@ always @(posedge clk) begin
             end
 
             S_DONE: begin
+                // New matrix streamed in → process again
                 if (buf_ready) state <= S_LOAD;
             end
 

@@ -35,10 +35,20 @@ wire signed [31:0] d2 = $signed(diag2);
 wire signed [31:0] d3 = $signed(diag3);
 
 // --------------------------------------------------------------------------
+// Noise floor threshold
+// --------------------------------------------------------------------------
+// Q16.16 fixed-point: 1 LSB = 1/65536. log() rounding on large-magnitude
+// rates (especially JPY ~149.5) leaves a residual of a few LSBs on the
+// diagonal after Floyd-Warshall even when rates are perfectly consistent.
+// NOISE_FLOOR = 32 corresponds to ~0.049% — well below any real arbitrage
+// signal (mode 1 produces ~983 LSBs) but safely above quantisation noise.
+localparam NOISE_FLOOR = 32'd32;
+
+// --------------------------------------------------------------------------
 // Combinational best-of-four selection
 // --------------------------------------------------------------------------
 // best_mag: magnitude (positive) of the most-negative diagonal, or 0
-// found:    1 if any diagonal is negative
+// found:    1 if any diagonal is negative AND exceeds the noise floor
 reg         comb_found;
 reg  [31:0] comb_mag;
 
@@ -46,21 +56,21 @@ always @(*) begin
     comb_found = 1'b0;
     comb_mag   = 32'd0;
 
-    if (d0 < 0) begin
+    if (d0 < 0 && (-d0 > $signed(NOISE_FLOOR))) begin
         comb_found = 1'b1;
         comb_mag   = -d0;
     end
 
     // Each subsequent check only overwrites if the new magnitude is larger
-    if (d1 < 0) begin
+    if (d1 < 0 && (-d1 > $signed(NOISE_FLOOR))) begin
         comb_found = 1'b1;
         if (-d1 > $signed(comb_mag)) comb_mag = -d1;
     end
-    if (d2 < 0) begin
+    if (d2 < 0 && (-d2 > $signed(NOISE_FLOOR))) begin
         comb_found = 1'b1;
         if (-d2 > $signed(comb_mag)) comb_mag = -d2;
     end
-    if (d3 < 0) begin
+    if (d3 < 0 && (-d3 > $signed(NOISE_FLOOR))) begin
         comb_found = 1'b1;
         if (-d3 > $signed(comb_mag)) comb_mag = -d3;
     end
