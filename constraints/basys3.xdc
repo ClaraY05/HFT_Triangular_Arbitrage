@@ -2,7 +2,6 @@
 ## basys3.xdc  --  Basys 3 Artix-7 pin constraints
 ## =============================================================================
 ## All pins verified against Digilent Basys 3 Reference Manual (rev B).
-## Uncomment or extend LED / segment lines as needed.
 ## =============================================================================
 
 ## ---- Clock (100 MHz oscillator) -------------------------------------------
@@ -11,7 +10,6 @@ set_property IOSTANDARD LVCMOS33 [get_ports clk]
 create_clock -period 10.000 -name sys_clk_pin -waveform {0.000 5.000} [get_ports clk]
 
 ## ---- Buttons ---------------------------------------------------------------
-## BtnC (centre) = reset
 set_property PACKAGE_PIN U18     [get_ports btnC]
 set_property IOSTANDARD LVCMOS33 [get_ports btnC]
 
@@ -19,10 +17,14 @@ set_property IOSTANDARD LVCMOS33 [get_ports btnC]
 set_property PACKAGE_PIN V17     [get_ports sw0]
 set_property IOSTANDARD LVCMOS33 [get_ports sw0]
 
-## ---- UART RX (USB-UART via FTDI FT2232HQ) ----------------------------------
+## ---- UART RX ---------------------------------------------------------------
 set_property PACKAGE_PIN B18     [get_ports rx]
 set_property IOSTANDARD LVCMOS33 [get_ports rx]
 
+
+## ---- UART TX ---------------------------------------------------------------
+set_property PACKAGE_PIN A18     [get_ports tx]
+set_property IOSTANDARD LVCMOS33 [get_ports tx]
 ## ---- LEDs [15:0] -----------------------------------------------------------
 set_property PACKAGE_PIN U16     [get_ports {led[0]}]
 set_property PACKAGE_PIN E19     [get_ports {led[1]}]
@@ -42,22 +44,44 @@ set_property PACKAGE_PIN P1      [get_ports {led[14]}]
 set_property PACKAGE_PIN L1      [get_ports {led[15]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {led[*]}]
 
-## ---- Seven-Segment Display -------------------------------------------------
-## Segments (active low, common anode)
-set_property PACKAGE_PIN W7      [get_ports {seg[6]}]   ;# g
-set_property PACKAGE_PIN W6      [get_ports {seg[5]}]   ;# f
-set_property PACKAGE_PIN U8      [get_ports {seg[4]}]   ;# e
-set_property PACKAGE_PIN V8      [get_ports {seg[3]}]   ;# d
-set_property PACKAGE_PIN U5      [get_ports {seg[2]}]   ;# c
-set_property PACKAGE_PIN V5      [get_ports {seg[1]}]   ;# b
-set_property PACKAGE_PIN U7      [get_ports {seg[0]}]   ;# a
+## ---- Seven-Segment Display — segments (active LOW) ------------------------
+##
+## FIX: seg bit order corrected to match seg7_controller encoding convention:
+##   seg[0] = g  (middle segment)      pin W7
+##   seg[1] = f  (top-left)            pin W6
+##   seg[2] = e  (bottom-left)         pin U8
+##   seg[3] = d  (bottom)              pin V8
+##   seg[4] = c  (bottom-right)        pin U5
+##   seg[5] = b  (top-right)           pin V5
+##   seg[6] = a  (top)                 pin U7
+##
+## The physical pins are unchanged from the Basys3 reference manual.
+## Only the Verilog bit indices have been corrected to match the controller's
+## encoding where seg[6:0] = {a, b, c, d, e, f, g} (MSB=a, LSB=g).
+##
+##         a(seg[6])
+##          ----
+## f(seg[1])|    |b(seg[5])
+##          -g(seg[0])-
+## e(seg[2])|    |c(seg[4])
+##          ----
+##         d(seg[3])
+##
+set_property PACKAGE_PIN W7      [get_ports {seg[0]}]   ;# g (middle)
+set_property PACKAGE_PIN W6      [get_ports {seg[1]}]   ;# f (top-left)
+set_property PACKAGE_PIN U8      [get_ports {seg[2]}]   ;# e (bottom-left)
+set_property PACKAGE_PIN V8      [get_ports {seg[3]}]   ;# d (bottom)
+set_property PACKAGE_PIN U5      [get_ports {seg[4]}]   ;# c (bottom-right)
+set_property PACKAGE_PIN V5      [get_ports {seg[5]}]   ;# b (top-right)
+set_property PACKAGE_PIN U7      [get_ports {seg[6]}]   ;# a (top)
 set_property IOSTANDARD LVCMOS33 [get_ports {seg[*]}]
 
 ## Decimal point
 set_property PACKAGE_PIN V7      [get_ports dp]
 set_property IOSTANDARD LVCMOS33 [get_ports dp]
 
-## Anodes (active low digit select)
+## Anodes (active LOW digit select)
+## an[0]=AN0 rightmost (ones)  ...  an[3]=AN3 leftmost (thousands)
 set_property PACKAGE_PIN U2      [get_ports {an[0]}]
 set_property PACKAGE_PIN U4      [get_ports {an[1]}]
 set_property PACKAGE_PIN V4      [get_ports {an[2]}]
@@ -92,6 +116,5 @@ set_property PACKAGE_PIN J18     [get_ports {vga_b[3]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {vga_b[*]}]
 
 ## ---- Timing exceptions -----------------------------------------------------
-## False path on reset (it's a button, multi-cycle is fine)
 set_false_path -from [get_ports btnC]
 set_false_path -from [get_ports sw0]
