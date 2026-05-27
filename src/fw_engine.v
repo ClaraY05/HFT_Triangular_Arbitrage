@@ -70,9 +70,17 @@ always @(posedge clk) begin
             end
 
             S_COMP: begin
-                through = $signed(dist[{i, k}]) + $signed(dist[{k, j}]);
-                if (through < $signed(dist[{i, j}]))
-                    dist[{i, j}] <= through;
+                // If dist[k][k] < 0 the intermediate node k already sits on
+                // a negative-weight cycle.  Using it as a relay would infect
+                // every path that passes through k with an arbitrarily large
+                // negative value (the cascade bug).  Skip the entire k-pass
+                // instead; the negative diagonal will still be reported by
+                // S_DONE as the detected arbitrage cycle.
+                if ($signed(dist[{k, k}]) >= 0) begin
+                    through = $signed(dist[{i, k}]) + $signed(dist[{k, j}]);
+                    if (through < $signed(dist[{i, j}]))
+                        dist[{i, j}] <= through;
+                end
 
                 if (j == 2'd3) begin
                     j <= 2'd0;
