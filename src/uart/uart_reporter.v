@@ -3,90 +3,88 @@
 // uart_reporter.v  --  UART TX manager for the arbitrage detector
 // =============================================================================
 //
-// Two TX duties, naturally time-separated:
+// BUG FIX: Added S_ECHO_ARM and S_RPT_ARM states to absorb the one-cycle
+// gap between pulsing tx_start and uart_tx asserting tx_busy.
 //
-//   ECHO   During matrix receive — every byte uart_rx accepts is immediately
-//          echoed back.  Python compares sent vs received byte-by-byte.
-//          (Python sends one byte, waits for echo, then sends the next.)
+// Root cause: uart_tx is a clocked FSM. When tx_start fires, it sets
+// busy<=1'b1 in the same clock edge — but that new value is not visible
+// to uart_reporter until the NEXT cycle. The original S_ECHO_WAIT /
+// S_RPT_WAIT checked !tx_busy immediately after the tx_start pulse, saw
+// busy=0, and exited early. For the 24-byte result packet this meant every
+// odd byte's tx_start fired while uart_tx was still busy on the even byte
+// and was silently dropped — producing a malformed or absent packet.
 //
-//   REPORT After Floyd-Warshall completes — a 24-byte result packet is sent
-//          so Python can read profit_found, profit_val, and all four diagonals.
+// Fix: insert a one-cycle ARM state after each tx_start pulse. The ARM
+// state does nothing except wait one cycle so that tx_busy is guaranteed
+// to have risen before the WAIT state checks it.
 //
-// Packet format (24 bytes, all multi-byte fields little-endian):
+// State diagram:
 //
-//   Offset  Size  Field
-//   ------  ----  -----------------------------------------------
-//      0     1    0xAA          start header byte 0
-//      1     1    0x55          start header byte 1
-//      2     1    profit_found  0x00 = no arb, 0x01 = arb detected
-//      3     4    profit_val    Q16.16 magnitude of best diagonal (LE)
-//      7     4    diag0         dist[0][0] raw Q16.16 (LE)
-//     11     4    diag1         dist[1][1] raw Q16.16 (LE)
-//     15     4    diag2         dist[2][2] raw Q16.16 (LE)
-//     19     4    diag3         dist[3][3] raw Q16.16 (LE)
-//     23     1    0xFF          end marker
+//   IDLE ──rx_valid──► ECHO_ARM ──► ECHO_WAIT ──!busy──► IDLE
+//      └─report_pending─► RPT_SEND ──► RPT_ARM ──► RPT_WAIT ──!busy──┐
+//                              ▲──────────────────────────────────────┘
+//                              (loop until all PKT_LEN bytes sent, then → IDLE)
 //
-// TIMING NOTE — one-cycle delay on fw_done:
-//   arb_detector registers profit_found/profit_val on the fw_done pulse, so
-//   those values are only valid from the NEXT clock cycle onwards.  This
-//   module therefore delays fw_done by one cycle (fw_done_d1) before latching
-//   the packet.  diag0-3 come from fw_engine's dist[] registers which remain
-//   stable until the next 'run' pulse, so they are also safe to read at
-//   fw_done_d1.
-//
+// Packet format (24 bytes, little-endian multi-byte fields):
+//   [0]    0xAA           header
+//   [1]    0x55           header
+//   [2]    profit_found   0x00 / 0x01
+//   [3:6]  profit_val     Q16.16 magnitude (LE)
+//   [7:10] diag0          dist[0][0] (LE)
+//   [11:14] diag1         dist[1][1] (LE)
+//   [15:18] diag2         dist[2][2] (LE)
+//   [19:22] diag3         dist[3][3] (LE)
+//   [23]   0xFF           end marker
 // =============================================================================
 module uart_reporter (
     input  wire        clk,
     input  wire        rst,
 
-    // --- Echo path (from uart_rx) -------------------------------------------
-    input  wire [7:0]  rx_data,    // byte just received
-    input  wire        rx_valid,   // one-cycle pulse
+    // --- Echo path -----------------------------------------------------------
+    input  wire [7:0]  rx_data,
+    input  wire        rx_valid,
 
-    // --- Result path (from fw_engine / arb_detector) ------------------------
-    input  wire        fw_done,         // one-cycle pulse from fw_engine
-    input  wire        profit_found,    // registered output of arb_detector
-    input  wire [31:0] profit_val,      // registered output of arb_detector
-    input  wire [31:0] diag0,           // dist[0][0]  (combinational from fw_engine)
-    input  wire [31:0] diag1,           // dist[1][1]
-    input  wire [31:0] diag2,           // dist[2][2]
-    input  wire [31:0] diag3,           // dist[3][3]
+    // --- Result path ---------------------------------------------------------
+    input  wire        fw_done,
+    input  wire        profit_found,
+    input  wire [31:0] profit_val,
+    input  wire [31:0] diag0,
+    input  wire [31:0] diag1,
+    input  wire [31:0] diag2,
+    input  wire [31:0] diag3,
 
-    // --- Interface to uart_tx -----------------------------------------------
+    // --- uart_tx interface ---------------------------------------------------
     output reg  [7:0]  tx_data,
     output reg         tx_start,
     input  wire        tx_busy
 );
 
-// --------------------------------------------------------------------------
-// Packet storage  (24 bytes, indexed 0..23)
-// --------------------------------------------------------------------------
 localparam PKT_LEN = 24;
 
-reg [7:0]  pkt [0:PKT_LEN-1];
-reg [4:0]  byte_idx;     // 0..23
-reg        report_pending;
+reg [7:0] pkt [0:PKT_LEN-1];
+reg [4:0] byte_idx;
+reg       report_pending;
 
 // --------------------------------------------------------------------------
 // One-cycle delay on fw_done so arb_detector outputs are stable
 // --------------------------------------------------------------------------
 reg fw_done_d1;
-always @(posedge clk) fw_done_d1 <= (rst) ? 1'b0 : fw_done;
+always @(posedge clk) fw_done_d1 <= rst ? 1'b0 : fw_done;
 
 // --------------------------------------------------------------------------
 // State machine
 // --------------------------------------------------------------------------
 localparam S_IDLE      = 3'd0,
-           S_ECHO_SEND = 3'd1,   // pulse tx_start for echo byte
-           S_ECHO_WAIT = 3'd2,   // wait for echo transmission to finish
-           S_RPT_SEND  = 3'd3,   // pulse tx_start for current packet byte
-           S_RPT_WAIT  = 3'd4;   // wait for that byte to finish
+           S_ECHO_ARM  = 3'd1,   // absorb one cycle after tx_start pulse (echo)
+           S_ECHO_WAIT = 3'd2,   // wait for uart_tx busy to clear (echo)
+           S_RPT_SEND  = 3'd3,   // load byte and pulse tx_start (report)
+           S_RPT_ARM   = 3'd4,   // absorb one cycle after tx_start pulse (report)
+           S_RPT_WAIT  = 3'd5;   // wait for uart_tx busy to clear (report)
 
 reg [2:0] state;
 
 always @(posedge clk) begin
-    // tx_start is a one-cycle pulse; default low every cycle
-    tx_start <= 1'b0;
+    tx_start <= 1'b0;   // default: no pulse
 
     if (rst) begin
         state          <= S_IDLE;
@@ -97,8 +95,8 @@ always @(posedge clk) begin
     end else begin
 
         // ------------------------------------------------------------------
-        // Latch result packet one cycle after fw_done.
-        // This runs independently of state so we never miss a done pulse.
+        // Latch result packet one cycle after fw_done (arb_detector outputs
+        // are registered on the fw_done edge and visible from the next cycle)
         // ------------------------------------------------------------------
         if (fw_done_d1) begin
             pkt[0]  <= 8'hAA;
@@ -128,47 +126,45 @@ always @(posedge clk) begin
             report_pending <= 1'b1;
         end
 
-        // ------------------------------------------------------------------
-        // State machine
-        // ------------------------------------------------------------------
         case (state)
 
-            // Wait for an echo request or a pending report
             S_IDLE: begin
                 if (rx_valid) begin
-                    // Echo takes priority — it happens during data receive,
-                    // before any report is triggered
                     tx_data  <= rx_data;
                     tx_start <= 1'b1;
-                    state    <= S_ECHO_WAIT;
+                    state    <= S_ECHO_ARM;     // ARM: wait one cycle for busy to rise
                 end else if (report_pending) begin
                     byte_idx <= 5'd0;
                     state    <= S_RPT_SEND;
                 end
             end
 
-            // tx_start was pulsed last cycle; wait for uart_tx to finish.
-            // tx_busy goes HIGH the cycle after tx_start, so on the first
-            // cycle here it may still be 0 — that is why we go via S_ECHO_SEND
-            // only for the report (see below); for echo we pulsed from S_IDLE.
-            // tx_busy will be 1 from the next cycle, so we will not exit early.
+            // One dead cycle — tx_busy rises here but isn't checked yet
+            S_ECHO_ARM: begin
+                state <= S_ECHO_WAIT;
+            end
+
+            // Now tx_busy is guaranteed high; wait for it to fall
             S_ECHO_WAIT: begin
                 if (!tx_busy)
                     state <= S_IDLE;
             end
 
-            // Load current packet byte and pulse tx_start
             S_RPT_SEND: begin
                 tx_data  <= pkt[byte_idx];
                 tx_start <= 1'b1;
-                state    <= S_RPT_WAIT;
+                state    <= S_RPT_ARM;          // ARM: wait one cycle for busy to rise
             end
 
-            // Wait for this packet byte to finish, then advance or finish
+            // One dead cycle — tx_busy rises here but isn't checked yet
+            S_RPT_ARM: begin
+                state <= S_RPT_WAIT;
+            end
+
+            // Now tx_busy is guaranteed high; wait for it to fall
             S_RPT_WAIT: begin
                 if (!tx_busy) begin
                     if (byte_idx == PKT_LEN - 1) begin
-                        // Entire packet sent
                         report_pending <= 1'b0;
                         state          <= S_IDLE;
                     end else begin
