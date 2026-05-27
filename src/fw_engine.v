@@ -41,31 +41,31 @@ always @(posedge clk) begin
         case (state)
 
             S_IDLE: begin
-                mat_addr <= 4'd0;
+                mat_addr <= 4'd0;        // always prime BRAM so mem[0] is ready on first S_LOAD cycle
                 if (run) begin
                     load_cnt <= 5'd0;
-                    mat_addr <= 4'd1;  // Request Word 1 immediately so it's ready for Cycle 2
                     state    <= S_LOAD;
                 end
             end
 
             S_LOAD: begin
-                if (load_cnt <= 5'd15) begin
-                    // Capture the data that was requested on the PREVIOUS cycle
+                // mat_addr was set to 0 in S_IDLE (reset) so mem[0] is
+                // already on rd_data when we enter S_LOAD (1-cycle BRAM latency).
+                // Capture dist[load_cnt] = rd_data each cycle and simultaneously
+                // advance mat_addr to load_cnt+1 so mem[load_cnt+1] arrives next cycle.
+                // Transition after all 16 words (load_cnt 0..15) are captured.
+                if (load_cnt <= 5'd15)
                     dist[load_cnt[3:0]] <= $signed(mat_data);
-                    
-                    load_cnt <= load_cnt + 1;
-                    
-                    // Keep requesting the NEXT address (cap at 15 to prevent BRAM wrapping)
-                    if (load_cnt < 5'd14)
-                        mat_addr <= load_cnt[3:0] + 4'd2; 
-                end
 
                 if (load_cnt == 5'd15) begin
                     k     <= 2'd0;
                     i     <= 2'd0;
                     j     <= 2'd0;
                     state <= S_COMP;
+                end else begin
+                    // advance address; clamp at 15
+                    mat_addr <= (load_cnt < 5'd14) ? load_cnt[3:0] + 5'd1 : 4'd15;
+                    load_cnt <= load_cnt + 1;
                 end
             end
 
@@ -99,15 +99,19 @@ always @(posedge clk) begin
             S_DONE: begin
                 done <= 1'b1;
 
-                best_val = 32'sh8000_0001;   // most-negative signed 32-bit value + 1
+                // Find the MOST negative diagonal (highest profit magnitude)
+                // that also exceeds the noise floor (matches arb_detector logic).
+                // Using < comparison so best_val tracks the minimum (most negative) value.
+                // Initialise to 0 so only genuinely negative diagonals win.
+                best_val = 32'sh0000_0000;
                 best_idx = 2'd0;
-                if ($signed(dist[0])  < 0 && $signed(dist[0])  > best_val)
+                if ($signed(dist[0])  < -$signed(32'd32) && $signed(dist[0])  < best_val)
                     begin best_val = dist[0];  best_idx = 2'd0; end
-                if ($signed(dist[5])  < 0 && $signed(dist[5])  > best_val)
+                if ($signed(dist[5])  < -$signed(32'd32) && $signed(dist[5])  < best_val)
                     begin best_val = dist[5];  best_idx = 2'd1; end
-                if ($signed(dist[10]) < 0 && $signed(dist[10]) > best_val)
+                if ($signed(dist[10]) < -$signed(32'd32) && $signed(dist[10]) < best_val)
                     begin best_val = dist[10]; best_idx = 2'd2; end
-                if ($signed(dist[15]) < 0 && $signed(dist[15]) > best_val)
+                if ($signed(dist[15]) < -$signed(32'd32) && $signed(dist[15]) < best_val)
                     begin best_val = dist[15]; best_idx = 2'd3; end
 
                 loop_mask <= 16'h0000;
