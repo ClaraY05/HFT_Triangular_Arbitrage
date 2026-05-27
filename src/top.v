@@ -89,7 +89,7 @@ arb_detector u_det (
 
 // Compute profit_pct_x100: (profit_val * 10000) >> 16, clamped to 9999
 // profit_val is Q16.16 so this gives XX.XX% as integer XXYY
-wire [47:0] pct_wide = (profit_val * 48'd10000) >> 16;
+wire [47:0] pct_wide = ({16'd0, profit_val} * 48'd10000) >> 16;
 wire [13:0] profit_pct_x100 = (pct_wide > 48'd9999) ? 14'd9999 : pct_wide[13:0];
 
 // --------------------------------------------------------------------------

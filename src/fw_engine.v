@@ -99,9 +99,9 @@ always @(posedge clk) begin
             S_DONE: begin
                 done <= 1'b1;
 
-                best_val = 32'sh7FFF_FFFF;
+                best_val = 32'sh8000_0001;   // most-negative signed 32-bit value + 1
                 best_idx = 2'd0;
-                if ($signed(dist[0])  < 0 && ($signed(dist[0])  > best_val || best_val == 32'sh7FFF_FFFF))
+                if ($signed(dist[0])  < 0 && $signed(dist[0])  > best_val)
                     begin best_val = dist[0];  best_idx = 2'd0; end
                 if ($signed(dist[5])  < 0 && $signed(dist[5])  > best_val)
                     begin best_val = dist[5];  best_idx = 2'd1; end
