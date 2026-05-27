@@ -101,10 +101,14 @@ always @(posedge clk) begin
 
                 best_val = 32'sh7FFF_FFFF;
                 best_idx = 2'd0;
-                if ($signed(dist[0])  < best_val) begin best_val = dist[0];  best_idx = 2'd0; end
-                if ($signed(dist[5])  < best_val) begin best_val = dist[5];  best_idx = 2'd1; end
-                if ($signed(dist[10]) < best_val) begin best_val = dist[10]; best_idx = 2'd2; end
-                if ($signed(dist[15]) < best_val) begin best_val = dist[15]; best_idx = 2'd3; end
+                if ($signed(dist[0])  < 0 && ($signed(dist[0])  > best_val || best_val == 32'sh7FFF_FFFF))
+                    begin best_val = dist[0];  best_idx = 2'd0; end
+                if ($signed(dist[5])  < 0 && $signed(dist[5])  > best_val)
+                    begin best_val = dist[5];  best_idx = 2'd1; end
+                if ($signed(dist[10]) < 0 && $signed(dist[10]) > best_val)
+                    begin best_val = dist[10]; best_idx = 2'd2; end
+                if ($signed(dist[15]) < 0 && $signed(dist[15]) > best_val)
+                    begin best_val = dist[15]; best_idx = 2'd3; end
 
                 loop_mask <= 16'h0000;
                 if (best_val < 0) begin

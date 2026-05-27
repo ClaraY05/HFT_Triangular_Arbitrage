@@ -68,7 +68,7 @@ wire [63:0] pct_wide = ({32'b0, raw_val} * 64'd10000) >> 16;
 wire [13:0] pct_val  = (pct_wide > 64'd9999) ? 14'd9999 : pct_wide[13:0];
 
 // Raw mode: integer part of Q16.16 (bits 31:16), shown as 0..65535 -> clamp to 9999
-wire [13:0] raw_14   = (raw_val[31:16] > 16'd9999) ? 14'd9999 : raw_val[29:16];
+wire [13:0] raw_14 = (raw_val[31:16] > 16'd9999) ? 14'd9999 : raw_val[31:16];
 
 wire [13:0] disp_val = sw_mode ? raw_14 : pct_val;
 
