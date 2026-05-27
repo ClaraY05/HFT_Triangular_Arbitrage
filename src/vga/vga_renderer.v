@@ -339,7 +339,10 @@ wire no_arb_text =
 localparam RW_Y = ST_Y + 16;
 localparam RW_X = ST_X;
 
-wire [15:0] raw_int  = profit_val[31:16];
+// profit_val[31:16] is the integer part of the Q16.16 magnitude.  For any
+// realistic arbitrage (< 100% profit) this is always 0.  Use bits [15:0]
+// (the fractional/magnitude part) to show the same raw count as the 7-seg.
+wire [15:0] raw_int  = profit_val[15:0];
 wire [13:0] raw_disp = (raw_int > 16'd9999) ? 14'd9999 : raw_int[13:0];
 
 wire [3:0]  rw_d3 = raw_disp / 1000;

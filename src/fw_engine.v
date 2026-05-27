@@ -99,15 +99,19 @@ always @(posedge clk) begin
             S_DONE: begin
                 done <= 1'b1;
 
-                best_val = 32'sh8000_0001;   // most-negative signed 32-bit value + 1
+                // Initialise to most-positive so any negative diagonal wins on
+                // the first comparison.  Use < (not >) so the MOST negative
+                // diagonal (highest profit magnitude) is selected — matching
+                // the arb_detector logic exactly.
+                best_val = 32'sh7FFF_FFFF;
                 best_idx = 2'd0;
-                if ($signed(dist[0])  < 0 && $signed(dist[0])  > best_val)
+                if ($signed(dist[0])  < 0 && $signed(dist[0])  < best_val)
                     begin best_val = dist[0];  best_idx = 2'd0; end
-                if ($signed(dist[5])  < 0 && $signed(dist[5])  > best_val)
+                if ($signed(dist[5])  < 0 && $signed(dist[5])  < best_val)
                     begin best_val = dist[5];  best_idx = 2'd1; end
-                if ($signed(dist[10]) < 0 && $signed(dist[10]) > best_val)
+                if ($signed(dist[10]) < 0 && $signed(dist[10]) < best_val)
                     begin best_val = dist[10]; best_idx = 2'd2; end
-                if ($signed(dist[15]) < 0 && $signed(dist[15]) > best_val)
+                if ($signed(dist[15]) < 0 && $signed(dist[15]) < best_val)
                     begin best_val = dist[15]; best_idx = 2'd3; end
 
                 loop_mask <= 16'h0000;
