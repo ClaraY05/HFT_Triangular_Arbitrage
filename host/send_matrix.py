@@ -73,31 +73,47 @@ BAUD        = 57600
 CURRENCIES  = ["USD", "EUR", "GBP", "JPY"]
 PKT_LEN     = 24          # result packet length
 ECHO_TIMEOUT = 0.5        # seconds per echo byte
-RESULT_TIMEOUT = 3.0      # seconds to wait for the result packet
+RESULT_TIMEOUT = 5.0      # seconds to wait for the result packet
 
 # ---------------------------------------------------------------------------
 # Built-in exchange rate matrices
 # ---------------------------------------------------------------------------
 
 # Realistic mid-market rates (no guaranteed arbitrage)
-RATES_NO_ARB = [
-    #  USD       EUR       GBP       JPY
-    [1.0000,   0.9200,   0.7900,  149.50],   # FROM USD
-    [1.0870,   1.0000,   0.8590,  162.70],   # FROM EUR
-    [1.2660,   1.1640,   1.0000,  189.40],   # FROM GBP
-    [0.00669,  0.00615,  0.00528,   1.00 ],   # FROM JPY
-]
+
+# index: 0=USD, 1=EUR, 2=GBP, 3=JPY
+base_to_x = [1.0, 0.92, 0.79, 149.50]
+
+# Initialize matrix
+size = 4
+RATES_NO_ARB = [[0.0 for _ in range(size)] for _ in range(size)]
+
+for i in range(size):
+    for j in range(size):
+        # Calculate rates relative to each other using the base currency
+        # rate(i -> j) = rate(base -> j) / rate(base -> i)
+        RATES_NO_ARB[i][j] = base_to_x[j] / base_to_x[i]
 
 # Same rates but USD→EUR→GBP→USD creates a small ~0.3% arbitrage loop.
 # USD→EUR: 0.9200, EUR→GBP: 0.8590, GBP→USD: 1.2750
 # Product: 0.9200 × 0.8590 × 1.2750 = 1.0073  (>1 → profit)
-RATES_ARB = [
-    #  USD       EUR       GBP       JPY
-    [1.0000,   0.9200,   0.7900,  149.50],   # FROM USD
-    [1.0870,   1.0000,   0.8590,  162.70],   # FROM EUR
-    [1.2750,   1.1640,   1.0000,  189.40],   # FROM GBP  ← USD rate bumped
-    [0.00669,  0.00615,  0.00528,   1.00 ],   # FROM JPY
-]
+
+# Realistic mid-market rates
+base_to_x = [1.0, 0.92, 0.79, 149.50]
+size = 4
+RATES_ARB = [[0.0 for _ in range(size)] for _ in range(size)]
+
+# 1. Build the base matrix with reciprocal consistency
+for i in range(size):
+    for j in range(size):
+        RATES_ARB[i][j] = base_to_x[j] / base_to_x[i]
+
+# 2. Inject a Realistic Arbitrage: 0.05% profit
+# We slightly lower the cost to acquire GBP using EUR.
+# Old rate: 0.79 / 0.92 = 0.858695
+# New rate: 0.861 (A 0.05% discrepancy)
+RATES_ARB[1][2] = 0.861  
+RATES_ARB[2][1] = 1 / 0.861
 
 # ---------------------------------------------------------------------------
 # Conversion helpers
