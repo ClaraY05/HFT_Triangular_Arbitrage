@@ -1,6 +1,6 @@
 # Triangular Arbitrage Detection Engine
 
-Hardware-accelerated triangular arbitrage detector running on a **Basys 3 (Artix-7)** FPGA.
+Hardware-accelerated triangular arbitrage detector running on a **Basys 3 (Artix-7)** FPGA. Developed in 3 weeks for UCLA's CS M152A course.
 
 ## Quick start
 
@@ -19,7 +19,7 @@ vivado -mode batch -source vivado/create_project.tcl
 # 4. Program board
 #    Hardware Manager → Auto Connect → Program Device
 
-# 5. Send a rate matrix from the host
+# 5. Send a rate matrix from the host, may use COMX or /dev/ttyUSBx depending on OS
 pip install pyserial
 python host/send_rates.py /dev/ttyUSB1 0   # no arbitrage
 python host/send_rates.py /dev/ttyUSB1 1   # ~1.5% GBP/EUR mispricing
