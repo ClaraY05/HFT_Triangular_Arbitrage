@@ -3,8 +3,7 @@
 test_suite.py  --  Full coverage test suite for the Basys 3 triangular arbitrage detector.
 
 Sends 7 test cases over UART and checks the FPGA result packet against expected values.
-Each test is designed to force a specific diagonal negative (or none), exercising every
-highlighted column/row combination on the VGA.
+Each test is designed to force a specific diagonal negative (or none).
 
 TESTS
 -----
@@ -23,25 +22,18 @@ USAGE
   python test_suite.py --port /dev/ttyUSB0 --test 2   # run only test 2
   python test_suite.py --port COM3 --verbose           # show full packet dump
 
-NOTE ON CASCADE-SKIP
---------------------
-  fw_engine skips the k-pass when dist[k][k] is already negative.  This means the
-  USD diagonal (k=0) cannot go negative via a single mispriced edge — any cycle
-  through USD that would make dist[0][0] negative first makes another diagonal
-  negative during the k=0 pass, which is then skipped before k=0 can run again.
-  USD highlighting therefore requires a multi-edge injection and is not tested here.
+Implementation note: The Floyd-Warshall engine skips a k-pass when dist[k][k] is 
+already negative. As a result, arbitrage involving USD may not cause the USD diagonal
+to become negative in the expected pass. The current test suite therefore does not 
+test USD highlighting and instead focuses on cases where another currency's diagonal
+becomes negative.
 """
-
 import argparse
 import math
 import struct
 import sys
 import time
-
-try:
-    import serial
-except ImportError:
-    sys.exit("pyserial is required:  pip install pyserial")
+import serial # must have pyserial installed
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -90,7 +82,7 @@ def q1616_to_pct(raw: int) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Python-side Floyd-Warshall (mirrors RTL including cascade-skip guard)
+# Python-side Floyd-Warshall
 # Used to pre-compute expected diagonals for each test.
 # ---------------------------------------------------------------------------
 def fw_python(rates):

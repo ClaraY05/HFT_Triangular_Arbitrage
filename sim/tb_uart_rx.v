@@ -1,10 +1,4 @@
 `timescale 1ns/1ps
-// =============================================================================
-// tb_uart_rx.v  --  Testbench for uart_rx
-// =============================================================================
-// Simulates a UART transmitter sending known bytes and checks that uart_rx
-// correctly deserializes them.
-// =============================================================================
 module tb_uart_rx;
 
 // Parameters matching DUT
@@ -12,9 +6,6 @@ localparam CLK_HZ = 100_000_000;
 localparam BAUD   = 115200;
 localparam BIT_T  = CLK_HZ / BAUD;  // clocks per bit = 868
 
-// --------------------------------------------------------------------------
-// DUT
-// --------------------------------------------------------------------------
 reg        clk, rst, rx;
 wire [7:0] data;
 wire       valid;
@@ -27,15 +18,10 @@ uart_rx #(.CLK_HZ(CLK_HZ), .BAUD(BAUD)) dut (
     .valid (valid)
 );
 
-// --------------------------------------------------------------------------
-// Clock: 10 ns period (100 MHz)
-// --------------------------------------------------------------------------
 initial clk = 0;
 always #5 clk = ~clk;
 
-// --------------------------------------------------------------------------
-// Task: transmit one byte LSB-first (8-N-1)
-// --------------------------------------------------------------------------
+// Transmit one byte LSB-first (8-N-1)
 task uart_send;
     input [7:0] byte_val;
     integer i;
@@ -51,9 +37,6 @@ task uart_send;
     end
 endtask
 
-// --------------------------------------------------------------------------
-// Stimulus
-// --------------------------------------------------------------------------
 integer errors;
 initial begin
     $dumpfile("tb_uart_rx.vcd");

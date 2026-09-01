@@ -1,22 +1,6 @@
 `timescale 1ns/1ps
-// =============================================================================
-// tb_top.v  --  Full integration testbench
-// =============================================================================
-// Simulates the Python host sending 64 UART bytes for a matrix that contains
-// a known arbitrage cycle, then verifies:
-//   1. buf_ready pulses from matrix_buffer
-//   2. fw_engine completes (done)
-//   3. profit_found asserts from arb_detector
-//   4. LED output flashes
-//
-// NOTE: VGA and seg7 are wired but only spot-checked (output observed, not
-//       pixel-validated — that is done visually on-board or in a waveform).
-// =============================================================================
 module tb_top;
 
-// --------------------------------------------------------------------------
-// DUT
-// --------------------------------------------------------------------------
 reg        clk, btnC, sw0, rx;
 wire [15:0] led;
 wire [6:0]  seg;
@@ -25,9 +9,8 @@ wire        dp;
 wire        vga_hsync, vga_vsync;
 wire [3:0]  vga_r, vga_g, vga_b;
 
-// VGA clock wizard is not available in sim — stub it out by editing
-// vga_top to #ifdef SIMULATION skip the IP.  For this tb we just check
-// non-VGA outputs.  See sim note in docs/architecture.md.
+// VGA clock wizard is not available in sim — only non-VGA outputs are
+// checked here; VGA and seg7 are validated visually on-board.
 top dut (
     .clk      (clk),
     .btnC     (btnC),
@@ -44,15 +27,10 @@ top dut (
     .vga_b    (vga_b)
 );
 
-// --------------------------------------------------------------------------
-// Clock
-// --------------------------------------------------------------------------
 initial clk = 0;
 always #5 clk = ~clk;   // 100 MHz
 
-// --------------------------------------------------------------------------
-// UART transmit task  (115200 baud = 868 clocks/bit)
-// --------------------------------------------------------------------------
+// UART transmit task (115200 baud = 868 clocks/bit)
 localparam BIT_T = 868;
 
 task uart_send_byte;
@@ -67,10 +45,8 @@ task uart_send_byte;
     end
 endtask
 
-// --------------------------------------------------------------------------
 // Send full 64-byte matrix (little-endian 32-bit words)
 // Uses the same negative-cycle matrix as tb_fw_engine
-// --------------------------------------------------------------------------
 localparam INF32 = 32'h3FFF_FFFF;
 
 reg [31:0] tx_mat [0:15];
@@ -89,9 +65,6 @@ task send_matrix;
     end
 endtask
 
-// --------------------------------------------------------------------------
-// Stimulus
-// --------------------------------------------------------------------------
 integer errors;
 integer cycle_count;
 
