@@ -1,10 +1,5 @@
 `timescale 1ns/1ps
-// =============================================================================
-// led_controller.v  --  Flash all 16 LEDs at ~2 Hz when arbitrage detected
-// =============================================================================
-// When profit_found is low  → all LEDs off.
-// When profit_found is high → LEDs alternate on/off at FLASH_HZ.
-// =============================================================================
+// led_controller.v -- flash all 16 LEDs at FLASH_HZ while profit_found is high
 module led_controller #(
     parameter CLK_HZ   = 100_000_000,
     parameter FLASH_HZ = 2              // blink frequency in Hz
@@ -26,7 +21,6 @@ always @(posedge clk) begin
         cnt   <= 0;
         phase <= 1'b0;
     end else begin
-        // Toggle counter
         if (cnt == HALF_PERIOD - 1) begin
             cnt   <= 0;
             phase <= ~phase;

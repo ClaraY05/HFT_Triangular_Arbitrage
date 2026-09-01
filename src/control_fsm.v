@@ -1,17 +1,6 @@
 `timescale 1ns/1ps
-// =============================================================================
-// control_fsm.v  --  Top-level sequencer
-// =============================================================================
-//
-//  State diagram:
-//
-//    IDLE ──(buf_ready)──► LOAD ──(1 cycle)──► RUN ──(fw_done)──► DONE
-//     ▲                                                              │
-//     └──────────────────────(buf_ready asserts again)──────────────┘
-//
-//  'run' is asserted for exactly ONE clock cycle to kick fw_engine.
-//  DONE stays until new data arrives, then auto-restarts.
-// =============================================================================
+// control_fsm.v -- sequencer: pulses 'run' for one cycle when a matrix is
+// buffered, waits for fw_done, then re-arms on the next buf_ready.
 module control_fsm (
     input  wire clk,
     input  wire rst,
@@ -40,7 +29,6 @@ always @(posedge clk) begin
             end
 
             S_LOAD: begin
-                // Assert run for one cycle, then wait for engine
                 run   <= 1'b1;
                 state <= S_RUN;
             end
@@ -50,7 +38,6 @@ always @(posedge clk) begin
             end
 
             S_DONE: begin
-                // New matrix streamed in → process again
                 if (buf_ready) state <= S_LOAD;
             end
 

@@ -1,15 +1,5 @@
 `timescale 1ns/1ps
-// =============================================================================
-// uart_rx.v  --  8-N-1 UART receiver
-// =============================================================================
-// Parameters
-//   CLK_HZ : system clock frequency in Hz   (default 100 MHz)
-//   BAUD   : desired baud rate              (default 115200)
-//
-// Outputs
-//   data  : received byte, valid when 'valid' is high for one clock cycle
-//   valid : single-cycle pulse when a complete byte has been received
-// =============================================================================
+// uart_rx.v -- 8-N-1 UART receiver; 'valid' pulses one cycle per byte
 module uart_rx #(
     parameter CLK_HZ = 100_000_000,
     parameter BAUD   = 57600
@@ -21,21 +11,15 @@ module uart_rx #(
     output reg        valid
 );
 
-// Number of clock cycles per UART bit period
-localparam integer CLKS_PER_BIT = CLK_HZ / BAUD;  // 868 @ 100 MHz / 115200
+localparam integer CLKS_PER_BIT = CLK_HZ / BAUD;
 
-// --------------------------------------------------------------------------
 // Two-FF synchroniser on rx to avoid metastability
-// --------------------------------------------------------------------------
 reg rx_s0, rx_s1;
 always @(posedge clk) begin
     rx_s0 <= rx;
     rx_s1 <= rx_s0;
 end
 
-// --------------------------------------------------------------------------
-// State machine
-// --------------------------------------------------------------------------
 localparam S_IDLE  = 2'd0,
            S_START = 2'd1,
            S_DATA  = 2'd2,

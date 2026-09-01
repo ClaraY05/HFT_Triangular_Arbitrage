@@ -51,14 +51,14 @@ always @(posedge clk) begin
 
             S_LOAD: begin
                 if (load_cnt <= 5'd15) begin
-                    // Capture the data that was requested on the PREVIOUS cycle
+                    // Data arrives one cycle after its address (registered read)
                     dist[load_cnt[3:0]] <= $signed(mat_data);
-                    
+
                     load_cnt <= load_cnt + 1;
-                    
-                    // Keep requesting the NEXT address (cap at 15 to prevent BRAM wrapping)
+
+                    // Cap at 15 to prevent BRAM address wrapping
                     if (load_cnt < 5'd14)
-                        mat_addr <= load_cnt[3:0] + 4'd2; 
+                        mat_addr <= load_cnt[3:0] + 4'd2;
                 end
 
                 if (load_cnt == 5'd15) begin
@@ -70,12 +70,9 @@ always @(posedge clk) begin
             end
 
             S_COMP: begin
-                // If dist[k][k] < 0 the intermediate node k already sits on
-                // a negative-weight cycle.  Using it as a relay would infect
-                // every path that passes through k with an arbitrarily large
-                // negative value (the cascade bug).  Skip the entire k-pass
-                // instead; the negative diagonal will still be reported by
-                // S_DONE as the detected arbitrage cycle.
+                // Skip the k-pass when dist[k][k] < 0: relaying through a
+                // node on a negative cycle would cascade unbounded negatives;
+                // the negative diagonal is still reported in S_DONE.
                 if ($signed(dist[{k, k}]) >= 0) begin
                     through = $signed(dist[{i, k}]) + $signed(dist[{k, j}]);
                     if (through < $signed(dist[{i, j}]))
@@ -99,10 +96,7 @@ always @(posedge clk) begin
             S_DONE: begin
                 done <= 1'b1;
 
-                // Initialise to most-positive so any negative diagonal wins on
-                // the first comparison.  Use < (not >) so the MOST negative
-                // diagonal (highest profit magnitude) is selected — matching
-                // the arb_detector logic exactly.
+                // Pick the MOST negative diagonal, matching arb_detector
                 best_val = 32'sh7FFF_FFFF;
                 best_idx = 2'd0;
                 if ($signed(dist[0])  < 0 && $signed(dist[0])  < best_val)
@@ -116,17 +110,13 @@ always @(posedge clk) begin
 
                 loop_mask <= 16'h0000;
                 if (best_val < 0) begin
-                    // Highlight the row and column of the pivot currency,
-                    // but EXCLUDE the diagonal self-cell [best_idx][best_idx]
-                    // (e.g. JPY->JPY), which has no economic meaning as an
-                    // arbitrage path.
+                    // Highlight the pivot currency's row and column, minus
+                    // the self-cell (no meaning as an arbitrage path)
                     for (mi = 0; mi < 4; mi = mi + 1) begin
-                        // Row highlight: skip the diagonal element
                         if (mi != best_idx)
                             loop_mask[best_idx * 4 + mi] <= 1'b1;
                     end
                     for (ni = 0; ni < 4; ni = ni + 1) begin
-                        // Column highlight: skip the diagonal element
                         if (ni != best_idx)
                             loop_mask[ni * 4 + best_idx] <= 1'b1;
                     end

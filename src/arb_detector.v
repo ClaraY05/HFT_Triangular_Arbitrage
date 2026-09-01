@@ -1,22 +1,8 @@
 `timescale 1ns/1ps
-// =============================================================================
-// arb_detector.v  --  Check diagonals for negative weight cycle
-// =============================================================================
-// BUG FIX: The original code read 'profit_found' inside the same always block
-// that wrote it.  In a clocked always block the register retains its OLD value
-// throughout the entire cycle — the new value is not visible until the NEXT
-// clock edge.  The chained comparisons:
-//
-//   if (d1 < 0 && (profit_found == 0 || ...))
-//
-// therefore always saw profit_found=0 (its reset value), meaning every
-// negative diagonal set profit_found=1 unconditionally, and whichever branch
-// executed last (d3) won — producing wrong profit_val and a false positive
-// whenever d3 happened to be slightly negative due to quantisation.
-//
-// Fix: use combinational intermediate wires to track the running best across
-// the four checks, then commit to registers in a single assignment.
-// =============================================================================
+// arb_detector.v -- check Floyd-Warshall diagonals for a negative cycle.
+// The best-of-four selection is combinational and committed in one clocked
+// assignment; comparisons chained inside the clocked block would read the
+// stale pre-edge value of profit_found.
 module arb_detector (
     input  wire        clk,
     input  wire        rst,
@@ -34,21 +20,12 @@ wire signed [31:0] d1 = $signed(diag1);
 wire signed [31:0] d2 = $signed(diag2);
 wire signed [31:0] d3 = $signed(diag3);
 
-// --------------------------------------------------------------------------
-// Noise floor threshold
-// --------------------------------------------------------------------------
-// Q16.16 fixed-point: 1 LSB = 1/65536. log() rounding on large-magnitude
-// rates (especially JPY ~149.5) leaves a residual of a few LSBs on the
-// diagonal after Floyd-Warshall even when rates are perfectly consistent.
-// NOISE_FLOOR = 32 corresponds to ~0.049% — well below any real arbitrage
-// signal (mode 1 produces ~983 LSBs) but safely above quantisation noise.
+// log() rounding leaves a few LSBs of residual on the diagonal even for
+// consistent rates; 32 LSBs (~0.049%) is above that noise but well below a
+// real signal (~983 LSBs for the 1.5% test case).
 localparam NOISE_FLOOR = 32'd32;
 
-// --------------------------------------------------------------------------
-// Combinational best-of-four selection
-// --------------------------------------------------------------------------
-// best_mag: magnitude (positive) of the most-negative diagonal, or 0
-// found:    1 if any diagonal is negative AND exceeds the noise floor
+// Best-of-four: magnitude of the most-negative diagonal exceeding the floor
 reg         comb_found;
 reg  [31:0] comb_mag;
 
@@ -61,7 +38,6 @@ always @(*) begin
         comb_mag   = -d0;
     end
 
-    // Each subsequent check only overwrites if the new magnitude is larger
     if (d1 < 0 && (-d1 > $signed(NOISE_FLOOR))) begin
         comb_found = 1'b1;
         if (-d1 > $signed(comb_mag)) comb_mag = -d1;
@@ -76,9 +52,7 @@ always @(*) begin
     end
 end
 
-// --------------------------------------------------------------------------
-// Register on done pulse
-// --------------------------------------------------------------------------
+// Commit on the done pulse
 always @(posedge clk) begin
     if (rst) begin
         profit_found <= 1'b0;

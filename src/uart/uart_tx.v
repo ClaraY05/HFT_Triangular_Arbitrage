@@ -1,19 +1,6 @@
 `timescale 1ns/1ps
-// =============================================================================
-// uart_tx.v  --  8-N-1 UART transmitter
-// =============================================================================
-// Parameters
-//   CLK_HZ : system clock frequency in Hz  (default 100 MHz)
-//   BAUD   : desired baud rate             (default 57600)
-//
-// Inputs
-//   data  : byte to transmit
-//   start : single-cycle pulse — load 'data' and begin transmission
-//
-// Outputs
-//   tx    : serial output line (idle HIGH)
-//   busy  : HIGH while a frame is being sent; ignore 'start' when busy
-// =============================================================================
+// uart_tx.v -- 8-N-1 UART transmitter; pulse 'start' to send a byte,
+// 'busy' stays high for the duration of the frame
 module uart_tx #(
     parameter CLK_HZ = 100_000_000,
     parameter BAUD   = 57600

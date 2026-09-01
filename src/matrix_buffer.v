@@ -13,14 +13,9 @@ module matrix_buffer (
     output wire [31:0] rd_data
 );
 
-// ================================================================
-// Memory
-// ================================================================
 reg [31:0] mem [0:15];
 
-// ================================================================
-// RX State Machine
-// ================================================================
+// Wait for the 0xAA 0x55 preamble, then assemble 64 bytes into 16 words
 localparam WAIT_AA   = 2'd0;
 localparam WAIT_55   = 2'd1;
 localparam RECEIVE   = 2'd2;
@@ -50,17 +45,11 @@ always @(posedge clk) begin
 
         case (state)
 
-            // ----------------------------------------------------
-            // Wait for 0xAA
-            // ----------------------------------------------------
             WAIT_AA: begin
                 if (byte_in == 8'hAA)
                     state <= WAIT_55;
             end
 
-            // ----------------------------------------------------
-            // Wait for 0x55
-            // ----------------------------------------------------
             WAIT_55: begin
                 if (byte_in == 8'h55) begin
                     state    <= RECEIVE;
@@ -72,11 +61,7 @@ always @(posedge clk) begin
                 end
             end
 
-            // ----------------------------------------------------
-            // Receive 64-byte payload
-            // ----------------------------------------------------
             RECEIVE: begin
-
                 // little-endian reconstruction
                 mem[byte_cnt[5:2]][byte_pos*8 +: 8] <= byte_in;
 
@@ -102,9 +87,7 @@ always @(posedge clk) begin
     end
 end
 
-// ================================================================
-// Read Port
-// ================================================================
+// Registered read port (1-cycle latency)
 reg [31:0] rd_reg;
 
 always @(posedge clk)

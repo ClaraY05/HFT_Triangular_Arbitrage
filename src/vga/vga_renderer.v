@@ -1,20 +1,8 @@
 `timescale 1ns/1ps
-// =============================================================================
-// vga_renderer.v  --  4×4 matrix grid with labels and legend
-// =============================================================================
-//
-// Layout (640×480):
-//
-//   Y=10:   Title bar  "TRIANGULAR ARBITRAGE DETECTOR"
-//   Y=40:   Column headers: USD  EUR  GBP  JPY  (above grid)
-//   Y=60:   Row labels left of grid: USD EUR GBP JPY
-//   Y=60:   4×4 grid, each cell 80×80 px, origin X=120
-//   Y=400:  Legend: [RED] = ARBITRAGE PATH   [GREY] = NO PROFIT
-//   Y=430:  Status: "PROFIT DETECTED  X.XX%" or "NO ARBITRAGE"
-//
-// Font: 8×8 ROM — characters encoded as 8 rows × 8 cols, drawn inline.
-// Only the characters we actually need are encoded (A-Z, 0-9, space, %, .).
-// =============================================================================
+// vga_renderer.v -- 4x4 matrix grid with labels, legend, and status text.
+// Layout (640x480): title at Y=8, column headers above the grid, row labels
+// left of it, 4x4 grid of 80px cells at (120,60), legend and status below.
+// Text uses an 8x8 font ROM holding only the characters needed.
 module vga_renderer #(
     parameter CELL  = 80,
     parameter BORDER = 2
@@ -32,19 +20,13 @@ module vga_renderer #(
     output reg  [3:0]  b
 );
 
-// ==========================================================================
 // Grid geometry
-// ==========================================================================
 localparam GRID_X  = 120;             // left edge of grid
 localparam GRID_Y  = 60;              // top edge of grid
 localparam GRID_W  = 4 * CELL;        // 320
 localparam GRID_H  = 4 * CELL;        // 320
 
-// ==========================================================================
-// 8×8 bitmap font ROM
-// Each character = 8 bytes (one per row, MSB = leftmost pixel)
-// Characters encoded: space(0x20) A-Z(0x41-0x5A) 0-9(0x30-0x39) %(0x25) .(0x2E) -(0x2D)
-// ==========================================================================
+// 8x8 font ROM: 8 bytes per character, MSB = leftmost pixel
 function [7:0] font_row;
     input [6:0] ch;
     input [2:0] row;
@@ -139,29 +121,7 @@ function [7:0] font_row;
     end
 endfunction
 
-// ==========================================================================
-// Text rendering helper
-// Draws a string at a given pixel origin.
-// Returns 1 if the current pixel (px,py) is a lit pixel of the string.
-// ==========================================================================
-
-// --- Currency label strings ---
-// Each label is 3 chars.  We store them as 21-bit vectors [char2,char1,char0].
-// We'll manually check each label position.
-
-// Column header positions (above grid): one label per column
-// Label "USD" at x = GRID_X + col*CELL + (CELL-24)/2, y = GRID_Y - 20
-// Label "EUR","GBP","JPY" similarly
-
-// Row label positions (left of grid): "USD","EUR","GBP","JPY"
-// at x = GRID_X - 32, y = GRID_Y + row*CELL + (CELL-8)/2
-
-// ==========================================================================
-// Text pixel lookup
-// Returns 1 if (px,py) falls on a lit pixel of any label/legend/status text
-// ==========================================================================
-
-// Helper: is (px,py) inside an 8×8 char at (cx,cy) for character ch?
+// 1 when (px,py) is a lit pixel of character ch drawn at (cx,cy)
 function is_char_pixel;
     input [9:0] px_in, py_in;
     input [9:0] cx, cy;
@@ -179,7 +139,7 @@ function is_char_pixel;
     end
 endfunction
 
-// Helper: draw a 3-char label at (cx,cy)
+// 3-char label at (cx,cy)
 function is_label3;
     input [9:0] px_in, py_in;
     input [9:0] cx, cy;
@@ -190,10 +150,6 @@ function is_label3;
                     is_char_pixel(px_in, py_in, cx+16, cy, c2);
     end
 endfunction
-
-// ==========================================================================
-// Compute all text pixels combinationally
-// ==========================================================================
 
 // --- Title ---
 localparam TX = 100;
@@ -228,8 +184,7 @@ wire title_px =
     is_char_pixel(px,py, TX+237,TY, 7'h4F) | // O
     is_char_pixel(px,py, TX+246,TY, 7'h52);  // R
 
-// --- Column headers (USD EUR GBP JPY) ---
-// Each centered in its 80px cell: offset = CELL/2 - 12 = 28
+// --- Column headers, centered in each cell ---
 localparam CH_Y = GRID_Y - 18;
 wire col_hdr_px =
     is_label3(px,py, GRID_X + 0*CELL+28, CH_Y, 7'h55,7'h53,7'h44) |  // USD
@@ -237,8 +192,7 @@ wire col_hdr_px =
     is_label3(px,py, GRID_X + 2*CELL+28, CH_Y, 7'h47,7'h42,7'h50) |  // GBP
     is_label3(px,py, GRID_X + 3*CELL+28, CH_Y, 7'h4A,7'h50,7'h59);   // JPY
 
-// --- Row labels (left of grid) ---
-// Centered vertically: offset = CELL/2 - 4 = 36
+// --- Row labels, left of grid ---
 localparam RL_X = GRID_X - 34;
 wire row_lbl_px =
     is_label3(px,py, RL_X, GRID_Y + 0*CELL+36, 7'h55,7'h53,7'h44) |  // USD
@@ -255,9 +209,8 @@ wire from_px =
 localparam LEG_Y = GRID_Y + GRID_H + 14;
 localparam LEG_X = GRID_X;
 
-// Red swatch  (16×8 block)
+// 16x8 colour swatches
 wire red_swatch  = (px >= LEG_X)    && (px < LEG_X+16)    && (py >= LEG_Y) && (py < LEG_Y+8);
-// Grey swatch (16×8 block)
 wire grey_swatch = (px >= LEG_X+130) && (px < LEG_X+146) && (py >= LEG_Y) && (py < LEG_Y+8);
 
 wire legend_text =
@@ -289,11 +242,7 @@ wire status_label =
     is_char_pixel(px,py, ST_X+45, ST_Y, 7'h54) |  // T
     is_char_pixel(px,py, ST_X+54, ST_Y, 7'h3A);   // :
 
-// Profit value digits (always rendered; show 0.00 when no profit)
-// profit_pct_x100 is a plain binary value in hundredths of %
-// e.g. 123 means 1.23% -> display as  "01.23"
-// Extract 4 decimal digits: thousands(tens-of-%), hundreds(ones-of-%),
-// tens(tenths-of-%), ones(hundredths-of-%) via successive division.
+// Profit digits: profit_pct_x100 is hundredths of % (123 -> "01.23")
 wire [13:0] pct = profit_pct_x100;          // 0..9999
 wire [3:0]  dig3 = pct / 1000;              // thousands  (tens of %)
 wire [3:0]  dig2 = (pct % 1000) / 100;     // hundreds   (ones of %)
@@ -331,17 +280,12 @@ wire no_arb_text =
     is_char_pixel(px,py, ST_X+159,ST_Y, 7'h47) |  // G
     is_char_pixel(px,py, ST_X+168,ST_Y, 7'h45));  // E
 
-// ==========================================================================
-// Raw Q16.16 integer sum display  (matches 7-seg SW0=1 mode)
-// Shows "RAW: XXXX" on the line below the profit % status.
-// profit_val[31:16] is the integer part; clamped to 9999 for 4-digit display.
-// ==========================================================================
+// --- "RAW: XXXX" line below the status (matches the 7-seg SW0=1 mode) ---
+// Bits [15:0] of the Q16.16 magnitude; the integer part [31:16] is always 0
+// for sub-100% profit.
 localparam RW_Y = ST_Y + 16;
 localparam RW_X = ST_X;
 
-// profit_val[31:16] is the integer part of the Q16.16 magnitude.  For any
-// realistic arbitrage (< 100% profit) this is always 0.  Use bits [15:0]
-// (the fractional/magnitude part) to show the same raw count as the 7-seg.
 wire [15:0] raw_int  = profit_val[15:0];
 wire [13:0] raw_disp = (raw_int > 16'd9999) ? 14'd9999 : raw_int[13:0];
 
@@ -366,16 +310,14 @@ wire raw_label =
     is_char_pixel(px,py, RW_X+18, RW_Y, 7'h57) |  // W
     is_char_pixel(px,py, RW_X+27, RW_Y, 7'h3A);   // :
 
-// 4-digit value with leading zero suppression (always show at least 1 digit)
+// 4 digits with leading-zero suppression
 wire raw_val_px =
     (blank_rw_d3 ? 1'b0 : is_char_pixel(px,py, RW_X+45, RW_Y, rw_c3)) |
     (blank_rw_d2 ? 1'b0 : is_char_pixel(px,py, RW_X+54, RW_Y, rw_c2)) |
     (blank_rw_d1 ? 1'b0 : is_char_pixel(px,py, RW_X+63, RW_Y, rw_c1)) |
     is_char_pixel(px,py, RW_X+72, RW_Y, rw_c0);
 
-// ==========================================================================
 // Grid pixel logic
-// ==========================================================================
 wire in_grid = (px >= GRID_X) && (px < GRID_X + GRID_W) &&
                (py >= GRID_Y) && (py < GRID_Y + GRID_H);
 
@@ -388,9 +330,7 @@ wire [1:0] row_idx = gy / CELL;
 wire on_border = in_grid && ((gx % CELL < BORDER) || (gy % CELL < BORDER));
 wire highlighted = in_grid && loop_mask[row_idx * 4 + col_idx];
 
-// ==========================================================================
 // Registered colour output
-// ==========================================================================
 always @(posedge pclk) begin
     if (!active) begin
         r <= 4'h0; g <= 4'h0; b <= 4'h0;

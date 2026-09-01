@@ -1,30 +1,7 @@
 `timescale 1ns/1ps
-// =============================================================================
-// seg7_digit.v  --  Single-digit display across all four Basys 3 anodes
-// =============================================================================
-// Displays the same digit (0-9) on every one of the four digit positions.
-//
-// SEGMENT ENCODING  (matches seg7_controller.v in the main project)
-// -----------------------------------------------------------------------
-// seg[6:0] = { CG, CF, CE, CD, CC, CB, CA }  (active-LOW; 0 = segment ON)
-//
-//          CA (seg[0])
-//           ----
-//   CF(1) |    | CB(5)
-//          -CG(6)-
-//   CE(2) |    | CC(4)
-//           ----
-//          CD (seg[3])
-//
-// XDC pin mapping (from basys3.xdc, active-LOW convention):
-//   seg[0]=W7  seg[1]=W6  seg[2]=U8  seg[3]=V8
-//   seg[4]=U5  seg[5]=V5  seg[6]=U7
-//
-// Wait — the XDC comment labels seg[0] as 'g' (middle) and seg[6] as 'a' (top),
-// which is the *physical* mapping, while the Verilog encoding in seg7_controller
-// uses seg[6]=CG (middle) and seg[0]=CA (top).  The XDC was already corrected
-// to cross those, so the encoding table below matches seg7_controller.v exactly.
-// =============================================================================
+// seg7_digit.v -- show one digit (0-9) on all four Basys 3 positions.
+// seg[6:0] = {CG,CF,CE,CD,CC,CB,CA}, active-LOW — same encoding as
+// seg7_controller.v; uart_digit_test.xdc maps these bits to the pins.
 module seg7_digit #(
     parameter CLK_HZ     = 100_000_000,
     parameter REFRESH_HZ = 1000            // anode refresh; 1 kHz = 250 µs per digit
@@ -37,14 +14,8 @@ module seg7_digit #(
     output reg         dp
 );
 
-// Number of clock cycles each digit slot is active
-localparam integer REFRESH_CNT = CLK_HZ / REFRESH_HZ / 4;
+localparam integer REFRESH_CNT = CLK_HZ / REFRESH_HZ / 4;  // cycles per digit slot
 
-// --------------------------------------------------------------------------
-// 7-segment decoder
-// Encoding {CG, CF, CE, CD, CC, CB, CA} – active LOW
-// Verified against the table in seg7_controller.v
-// --------------------------------------------------------------------------
 function [6:0] seg_decode;
     input [3:0] val;
     begin
@@ -65,9 +36,7 @@ function [6:0] seg_decode;
     end
 endfunction
 
-// --------------------------------------------------------------------------
 // Refresh counter and digit selector
-// --------------------------------------------------------------------------
 reg [$clog2(REFRESH_CNT+1)-1:0] cnt;
 reg [1:0] sel;   // 0 = AN0 (rightmost) … 3 = AN3 (leftmost)
 
@@ -83,12 +52,7 @@ always @(posedge clk) begin
     end
 end
 
-// --------------------------------------------------------------------------
-// Output registers
-// Registering prevents segment/anode glitches on digit transitions.
-// The same decoded segment pattern is used for every digit position since
-// we want all four displays to show the same value.
-// --------------------------------------------------------------------------
+// Registered outputs prevent glitches on digit transitions
 always @(posedge clk) begin
     if (rst) begin
         seg <= 7'b111_1111;   // all segments OFF

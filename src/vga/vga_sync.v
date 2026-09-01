@@ -1,20 +1,8 @@
 `timescale 1ns/1ps
-// =============================================================================
-// vga_sync.v  --  640×480 @ 60 Hz VGA timing generator
-// =============================================================================
-//
-// Pixel clock requirement: 25.175 MHz
-// Generate via Vivado Clocking Wizard from 100 MHz board clock.
-//
-// Horizontal timing (pixels):
-//   Active  640  Front porch  16  Sync  96  Back porch  48  Total  800
-//
-// Vertical timing (lines):
-//   Active  480  Front porch  10  Sync   2  Back porch  33  Total  525
-//
-// Both sync outputs are ACTIVE LOW (standard VGA).
-// 'active' is high only within the visible 640×480 region.
-// =============================================================================
+// vga_sync.v -- 640x480 @ 60 Hz timing generator (25.175 MHz pixel clock).
+// H: 640 active / 16 FP / 96 sync / 48 BP (800 total)
+// V: 480 active / 10 FP /  2 sync / 33 BP (525 total)
+// Syncs are active-LOW; 'active' is high in the visible region.
 module vga_sync (
     input  wire        pclk,    // 25.175 MHz pixel clock
     input  wire        rst,
@@ -45,9 +33,7 @@ localparam H_SYNC_END   = H_ACTIVE + H_FP + H_SYNC;      // 752
 localparam V_SYNC_START = V_ACTIVE + V_FP;               // 490
 localparam V_SYNC_END   = V_ACTIVE + V_FP + V_SYNC;      // 492
 
-// --------------------------------------------------------------------------
 // Pixel counters
-// --------------------------------------------------------------------------
 always @(posedge pclk) begin
     if (rst) begin
         px <= 10'd0;
@@ -61,9 +47,7 @@ always @(posedge pclk) begin
     end
 end
 
-// --------------------------------------------------------------------------
 // Sync signals (active low)
-// --------------------------------------------------------------------------
 always @(posedge pclk) begin
     hsync <= ~(px >= H_SYNC_START && px < H_SYNC_END);
     vsync <= ~(py >= V_SYNC_START && py < V_SYNC_END);

@@ -1,15 +1,5 @@
 `timescale 1ns/1ps
-// =============================================================================
-// bin_to_bcd.v  --  20-bit binary → 5 BCD digits (double-dabble)
-// =============================================================================
-// Combinational.  Maximum input value 999999 fits in 20 bits (2^20 = 1048576).
-// The 5 output digits represent: [ten-thousands][thousands][hundreds][tens][ones]
-//
-// Double-dabble (shift-and-add-3) algorithm:
-//   For each bit from MSB to LSB:
-//     1. If any BCD nibble >= 5, add 3 to it.
-//     2. Shift the entire scratch register left by 1, bringing in the next bit.
-// =============================================================================
+// bin_to_bcd.v -- 20-bit binary to 5 BCD digits (combinational double-dabble)
 module bin_to_bcd (
     input  wire [19:0] bin,
     output wire [3:0]  ten_thou,
@@ -19,7 +9,7 @@ module bin_to_bcd (
     output wire [3:0]  ones
 );
 
-// Scratch register: 20 BCD bits (5 digits) + 20 binary input bits
+// 20 BCD bits (5 digits) + 20 binary input bits
 reg [39:0] scratch;
 
 integer bit_i;

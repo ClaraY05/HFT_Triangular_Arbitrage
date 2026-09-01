@@ -1,14 +1,5 @@
 `timescale 1ns/1ps
-// =============================================================================
-// vga_top.v  --  VGA subsystem top
-// =============================================================================
-// BUG FIX (original): Restored clk_wiz_0 for proper pixel-clock routing.
-//
-// BUG FIX 2: Added double-flop CDC synchronisers for all signals crossing
-// from the 100 MHz clk domain into pclk (25.175 MHz).
-//
-// FEATURE: profit_val (raw Q16.16 magnitude) passed through for on-screen display.
-// =============================================================================
+// vga_top.v -- VGA subsystem: pixel-clock PLL, CDC into pclk, sync + renderer
 module vga_top (
     input  wire        clk,               // 100 MHz board clock
     input  wire        rst,
@@ -27,7 +18,7 @@ wire pclk;
 wire pll_locked;
 
 `ifndef SIMULATION
-    // Xilinx Clocking Wizard: 100 MHz -> 25.175 MHz pixel clock
+    // Clocking Wizard: 100 MHz -> 25.175 MHz pixel clock
     clk_wiz_0 u_clk_wiz (
         .clk_in1  (clk),
         .clk_out1 (pclk),
@@ -41,12 +32,8 @@ wire pll_locked;
 
 wire vga_rst = rst | ~pll_locked;
 
-// -----------------------------------------------------------------------
-// Clock-domain crossing: 100 MHz clk -> pclk (25.175 MHz)
-// Double-flop synchronisers for all signals produced in the clk domain.
-// Without these the renderer latches stale or metastable values and the
-// display never updates when a new rate matrix is loaded.
-// -----------------------------------------------------------------------
+// Double-flop CDC for everything crossing 100 MHz clk -> pclk; without it
+// the renderer latches metastable values and the display never updates
 reg        pf_s1,  pf_s2;
 reg [15:0] lm_s1,  lm_s2;
 reg [13:0] pp_s1,  pp_s2;

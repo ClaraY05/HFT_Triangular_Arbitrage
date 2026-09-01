@@ -1,47 +1,7 @@
 `timescale 1ns/1ps
-// =============================================================================
-// seg7_controller.v  --  4-digit multiplexed 7-segment display
-// =============================================================================
-//
-// SW0 = 0  ->  Profit percentage mode  (default)
-//              Displays XX.XX  e.g. "01.23" for 1.23%, "00.00" for no profit.
-//              pct_val = (profit_val * 10000) >> 16  (Q16.16 -> hundredths of %)
-//              After double-dabble: d3=tens-of-%, d2=ones-of-%, d1=tenths, d0=hundredths
-//              Decimal point on AN2 (digit==2), giving: [d3][d2].[d1][d0]
-//
-// SW0 = 1  ->  Raw Q16.16 integer part debug mode.
-//              Shows profit_val[29:16] as 0-16383, no decimal point.
-//
-// -----------------------------------------------------------------------------
-// SEGMENT ENCODING  (verified against reference controller)
-// -----------------------------------------------------------------------------
-// Bit order in seg[6:0]:
-//   seg[6]=CG(mid)  seg[5]=CF(top-left)  seg[4]=CE(bot-left)
-//   seg[3]=CD(bot)  seg[2]=CC(bot-right) seg[1]=CB(top-right) seg[0]=CA(top)
-//
-// Active LOW (0=segment ON, 1=segment OFF).
-//
-//         CA(seg[0])
-//          ----
-//  CF(5) |    | CB(1)
-//          -CG(6)-
-//  CE(4) |    | CC(2)
-//          ----
-//         CD(seg[3])
-//
-// Encoding table  {CG,CF,CE,CD,CC,CB,CA}:
-//   0 -> 7'b1000000   1 -> 7'b1111001   2 -> 7'b0100100   3 -> 7'b0110000
-//   4 -> 7'b0011001   5 -> 7'b0010010   6 -> 7'b0000010   7 -> 7'b1111000
-//   8 -> 7'b0000000   9 -> 7'b0010000
-//
-// -----------------------------------------------------------------------------
-// ANODE MAPPING  (Basys3, active LOW)
-// -----------------------------------------------------------------------------
-//   digit_sel=3 -> AN3 (4'b0111) leftmost  = d3 (tens of %)
-//   digit_sel=2 -> AN2 (4'b1011)           = d2 (ones of %) + dp in % mode
-//   digit_sel=1 -> AN1 (4'b1101)           = d1 (tenths of %)
-//   digit_sel=0 -> AN0 (4'b1110) rightmost = d0 (hundredths of %)
-// =============================================================================
+// seg7_controller.v -- 4-digit multiplexed 7-segment display
+// SW0=0: profit percent as "XX.XX" (hundredths of %, dp after AN2)
+// SW0=1: raw Q16.16 magnitude 0-9999, no decimal point
 module seg7_controller #(
     parameter CLK_HZ     = 100_000_000,
     parameter REFRESH_HZ = 1000            // mux refresh (1 kHz -> 250 us/digit)
@@ -57,28 +17,18 @@ module seg7_controller #(
 
 localparam REFRESH_CNT = CLK_HZ / REFRESH_HZ / 4;  // cycles per digit slot
 
-// --------------------------------------------------------------------------
-// Compute display value
-// --------------------------------------------------------------------------
-// % mode: display_int = profit_val * 10000 / 65536
-//   = value in hundredths of percent, 0..9999
-//   e.g. 1.23% -> 123, shown as "01.23"
-// Use 64-bit intermediate so Vivado does not truncate the multiply.
+// Percent mode: hundredths of % (1.23% -> 123), clamped to 9999.
+// 64-bit intermediate so the multiply is not truncated.
 wire [63:0] pct_wide = ({32'b0, raw_val} * 64'd10000) >> 16;
 wire [13:0] pct_val  = (pct_wide > 64'd9999) ? 14'd9999 : pct_wide[13:0];
 
-// Raw mode: lower 16 bits of Q16.16 magnitude, shown as 0..9999.
-// profit_val for realistic arbitrage (< 100%) is always < 65536, so all
-// meaningful data lives in bits [15:0].  Bits [31:16] are the integer part
-// and are permanently 0 for any sub-100% profit — which caused the display
-// to be stuck at 0 when using the old profit_val[31:16] expression.
+// Raw mode: bits [15:0] of the Q16.16 magnitude (integer part [31:16] is
+// always 0 for sub-100% profit), clamped to 9999.
 wire [13:0] raw_14 = (raw_val[15:0] > 16'd9999) ? 14'd9999 : raw_val[13:0];
 
 wire [13:0] disp_val = sw_mode ? raw_14 : pct_val;
 
-// --------------------------------------------------------------------------
-// 14-bit binary -> 4-digit BCD  (double-dabble, combinational)
-// --------------------------------------------------------------------------
+// 14-bit binary -> 4-digit BCD (combinational double-dabble)
 reg [3:0] d3, d2, d1, d0;   // thousands, hundreds, tens, ones
 reg [13:0] bcd_in;
 integer bi;
@@ -101,16 +51,10 @@ always @(*) begin
     end
 end
 
-// --------------------------------------------------------------------------
-// Leading zero suppression
-// d3 (thousands) is blanked when zero; d2 (hundreds) always shown
-// so the display always reads at least "0X.XX"
-// --------------------------------------------------------------------------
+// Blank the thousands digit when zero so the display reads at least "0X.XX"
 wire blank_d3 = (d3 == 4'd0);
 
-// --------------------------------------------------------------------------
 // Refresh counter and digit selector
-// --------------------------------------------------------------------------
 reg [$clog2(REFRESH_CNT+1)-1:0] cnt;
 reg [1:0] digit;   // 0 = rightmost (AN0), 3 = leftmost (AN3)
 
@@ -125,19 +69,9 @@ always @(posedge clk) begin
         cnt <= cnt + 1;
 end
 
-// --------------------------------------------------------------------------
-// Select current digit value, blank flag, and decimal point
-// --------------------------------------------------------------------------
-// DECIMAL POINT:
-//   pct_val is in hundredths of %.  After double-dabble:
-//     d3=tens-%, d2=ones-%, d1=tenths-%, d0=hundredths-%
-//   Display should read  [d3][d2].[d1][d0]  e.g. "01.23"
-//   The decimal point is stored in the AN2 digit (digit==2), which is d2.
-//   i.e. cur_dp = 0 (lit) when digit==2 AND sw_mode==0.
-//
-//   NOTE: In a common-anode display the decimal point DP pin is active-LOW,
-//   the same as the segments.  cur_dp=0 turns the dot ON.
-// --------------------------------------------------------------------------
+// Select current digit value, blank flag, and decimal point.
+// dp is active-LOW like the segments; it sits after the AN2 digit ("XX.XX")
+// and is lit only in percent mode.
 reg [3:0] cur_val;
 reg       cur_blank;
 reg       cur_dp;
@@ -154,8 +88,6 @@ always @(*) begin
         2'd2: begin   // AN2 -- d2 = ones of integer %
             cur_val   = d2;
             cur_blank = 1'b0;
-            // Decimal point sits AFTER this digit (between AN2 and AN1)
-            // giving layout XX.XX -- lit in % mode, off in raw mode
             cur_dp    = sw_mode ? 1'b1 : 1'b0;
         end
         2'd1: begin   // AN1 -- d1 = tenths of %
@@ -176,12 +108,7 @@ always @(*) begin
     endcase
 end
 
-// --------------------------------------------------------------------------
-// 7-segment decode
-// Encoding verified against reference controller:
-//   seg[6]=CG  seg[5]=CF  seg[4]=CE  seg[3]=CD
-//   seg[2]=CC  seg[1]=CB  seg[0]=CA   (active LOW)
-// --------------------------------------------------------------------------
+// 7-segment decode: seg[6:0] = {CG,CF,CE,CD,CC,CB,CA}, active LOW
 function [6:0] seg_decode;
     input [3:0] val;
     input       blank;
@@ -207,9 +134,7 @@ function [6:0] seg_decode;
     end
 endfunction
 
-// --------------------------------------------------------------------------
-// Output registers  (registered to prevent glitches on anode transitions)
-// --------------------------------------------------------------------------
+// Registered outputs prevent glitches on anode transitions
 always @(posedge clk) begin
     if (rst) begin
         seg <= 7'b111_1111;
